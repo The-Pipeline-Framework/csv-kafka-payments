@@ -71,4 +71,24 @@ fi
 read -r -a maven_args <<< "${MAVEN_ARGS}"
 "$ROOT_DIR/bootstrap-application-prereqs.sh"
 
-"$MVN_BIN" "${maven_args[@]}" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+default_project_selection=(
+  -pl
+  common,payments-processing-svc,pipeline-runtime-svc,persistence-svc,orchestrator-svc
+)
+caller_selected_projects=false
+for argument in "$@"; do
+  case "$argument" in
+    -pl|--projects|-pl=*|--projects=*)
+      caller_selected_projects=true
+      break
+      ;;
+  esac
+done
+
+# Quarkus workspace discovery requires the canonical pom.xml reactor. Using an alternate
+# top-level POM causes the aggregating application parent and its modules to be loaded twice.
+if [[ "$caller_selected_projects" == "true" ]]; then
+  "$MVN_BIN" "${maven_args[@]}" -f "$CSV_DIR/pom.xml" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+else
+  "$MVN_BIN" "${maven_args[@]}" -f "$CSV_DIR/pom.xml" "${default_project_selection[@]}" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+fi
