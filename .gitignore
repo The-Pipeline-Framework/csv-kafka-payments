@@ -37,6 +37,7 @@ target/
 # Generated files
 dependency-reduced-pom.xml
 *SUMMARY.md
+/config/pipeline.runtime.yaml
 __pycache__/
 *.py[cod]
 

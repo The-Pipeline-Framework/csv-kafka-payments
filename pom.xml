@@ -57,6 +57,8 @@
         <module>payment-status-svc</module>
         <module>persistence-svc</module>
         <module>orchestrator-svc</module>
+        <module>pipeline-runtime-svc</module>
+        <module>monolith-svc</module>
     </modules>
 
     <properties>

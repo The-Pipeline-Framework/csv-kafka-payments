@@ -551,7 +551,7 @@ merged `PaymentOutput` rows through Object Publish.
 ./build-monolith.sh
 ```
 
-`build-monolith.sh` applies the monolith runtime mapping, builds `pom.monolith.xml`,
+`build-monolith.sh` applies the monolith runtime mapping and selects the monolith modules from the canonical root reactor,
 sets `-Dtpf.build.transport=LOCAL` for the build, and restores the previous `config/pipeline.runtime.yaml` afterwards.
 The build-time switch `-Dtpf.build.transport=LOCAL` controls code generation only (annotation processor option);
 it does not affect runtime behavior. The generated monolith artifact already contains `LocalClientStep` classes,

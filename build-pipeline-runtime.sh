@@ -45,6 +45,8 @@ cleanup() {
   if [[ -n "$backup_file" ]]; then
     cp "$backup_file" "$ACTIVE_MAPPING"
     rm -f "$backup_file"
+  else
+    rm -f "$ACTIVE_MAPPING"
   fi
   if [[ -n "$pipeline_config_backup_file" ]]; then
     cp "$pipeline_config_backup_file" "$ACTIVE_PIPELINE_CONFIG"

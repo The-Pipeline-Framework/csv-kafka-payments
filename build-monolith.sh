@@ -27,6 +27,8 @@ cleanup() {
   if [[ -n "$backup_file" ]]; then
     cp "$backup_file" "$ACTIVE_MAPPING"
     rm -f "$backup_file"
+  else
+    rm -f "$ACTIVE_MAPPING"
   fi
 }
 trap cleanup EXIT
@@ -58,7 +60,7 @@ if [[ " ${MAVEN_ARGS:-} " != *" -Dmaven.repo.local="* ]]; then
 fi
 "$ROOT_DIR/bootstrap-application-prereqs.sh"
 
-"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=monolith -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean compile -pl orchestrator-svc -am "${ORCHESTRATOR_ARGS[@]}"
+"$MVN_BIN" -f "$CSV_DIR/pom.xml" -Dcsv.runtime.layout=monolith -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean compile -pl orchestrator-svc -am "${ORCHESTRATOR_ARGS[@]}"
 
 echo "Building monolith..."
-"$MVN_BIN" -f "$CSV_DIR/pom.monolith.xml" -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+"$MVN_BIN" -f "$CSV_DIR/pom.xml" -pl common,monolith-svc -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"

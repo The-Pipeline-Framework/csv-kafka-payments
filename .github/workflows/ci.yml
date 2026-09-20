@@ -33,8 +33,3 @@ jobs:
 
       - name: Compile and run unit tests
         run: ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
-
-      - name: Validate alternative build topologies
-        run: |
-          ./mvnw -B -f pom.pipeline-runtime.xml validate --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
-          ./mvnw -B -f pom.monolith.xml validate --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
