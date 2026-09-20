@@ -1,24 +1,54 @@
-# Compiled class file
-*.class
+### IntelliJ IDEA ###
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
 
-# Log file
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+# Project
+.idea/workspace.xml
+.m2/
+target/
+*.out
+
+# Generated files
+dependency-reduced-pom.xml
+*SUMMARY.md
+__pycache__/
+*.py[cod]
+
+# Quarkus
+.quarkus
+
+# Local configuration and logs
+docker-compose.local.yml
+docker-compose.orchestrator.local.yml
 *.log
+*.pid
 
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+# UI Dashboard build output
+ui-dashboard/dist/
+ui-dashboard/node_modules/
