@@ -148,6 +148,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Boolean.getBoolean("csv.e2e.tempo.pause.before.teardown");
     private static final boolean OPERATOR_DASHBOARD_10K_ACTIVE =
             Boolean.getBoolean("csv.e2e.operator-dashboard.10k.enabled");
+    private static final boolean PREBUILT_MODULAR_IMAGES =
+            Boolean.getBoolean("csv.e2e.prebuilt.modular.images");
     private static final boolean TELEMETRY_HAPPY_PATH_ONLY =
             Boolean.parseBoolean(System.getProperty("csv.e2e.telemetry.happy-path-only", "true"));
     private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
@@ -982,6 +984,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     private static synchronized void rebuildModularServiceImages() throws IOException {
         if (MONOLITH_LAYOUT || PIPELINE_RUNTIME_LAYOUT) {
+            return;
+        }
+        if (PREBUILT_MODULAR_IMAGES) {
+            LOG.info("Using prebuilt modular service images; startup will verify their architecture and framework provenance.");
             return;
         }
         if (modularServiceImagesVerified) {
@@ -3135,7 +3141,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                     "Expected merged replay to contain unapproved branch events.");
         }
         assertReplayMergeNode(replayDocument, "FinalizePaymentOutput");
-        assertReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput");
+        assertReplayServiceEvents(replayDocument, "FinalizePaymentOutput", "ProcessFinalizePaymentOutputService");
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
         assertReplayStepEvents(replayDocument, "ObjectIngest");
@@ -3267,6 +3273,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(
                 replayDocument.events().stream().anyMatch(event -> stepName.equals(event.step())),
                 "Expected merged replay to contain direct events for " + stepName + ".");
+    }
+
+    private void assertReplayServiceEvents(
+            PipelineReplayDocument replayDocument, String stepName, String serviceName) {
+        assertTrue(
+                replayDocument.events().stream().anyMatch(event ->
+                        stepName.equals(event.step()) && serviceName.equals(event.service())),
+                "Expected merged replay to contain direct events for service " + serviceName
+                        + " at step " + stepName + ".");
     }
 
     private void assertReplayMergeNode(PipelineReplayDocument replayDocument, String stepName) {
