@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "suites": {
+    "smoke": {
+      "command": ["bash", "scripts/system-test-suite.sh", "smoke"],
+      "timeoutMinutes": 90
+    },
+    "ha": {
+      "command": ["bash", "scripts/system-test-suite.sh", "ha"],
+      "timeoutMinutes": 360
+    },
+    "ha-scale": {
+      "command": ["bash", "scripts/system-test-suite.sh", "ha-scale"],
+      "timeoutMinutes": 360
+    },
+    "native": {
+      "command": ["bash", "scripts/system-test-suite.sh", "native"],
+      "timeoutMinutes": 360
+    }
+  }
+}
