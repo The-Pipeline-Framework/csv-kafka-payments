@@ -34,6 +34,19 @@
         },
         "nullMarkerNumber" : null,
         "nullMarkerProtoName" : null
+      }, {
+        "number" : 4,
+        "name" : "sourceIdentity",
+        "protoName" : "source_identity",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],

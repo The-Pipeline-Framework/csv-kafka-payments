@@ -11,13 +11,33 @@ import com.opencsv.bean.StatefulBeanToCsv;
 import com.opencsv.bean.StatefulBeanToCsvBuilder;
 import org.pipelineframework.objectpublish.ObjectPayloadChunk;
 import org.pipelineframework.objectpublish.ObjectPublishGroupRenderer;
-import org.pipelineframework.objectpublish.StreamingObjectPublishMapper;
+import org.pipelineframework.objectpublish.PagedStreamingObjectPublishMapper;
 
 /**
  * Renders terminal CSV payment outputs as grouped CSV object payloads.
  */
 public final class CsvPaymentOutputPublishMapper
-    implements StreamingObjectPublishMapper<org.pipelineframework.csv.domain.PaymentOutput> {
+    implements PagedStreamingObjectPublishMapper<org.pipelineframework.csv.domain.PaymentOutput> {
+
+    @Override
+    public ObjectPayloadChunk groupPrefix(String groupKey) {
+        return ObjectPayloadChunk.EMPTY;
+    }
+
+    @Override
+    public ObjectPayloadChunk groupSuffix(String groupKey, Map<String, String> combinedMetadata) {
+        return ObjectPayloadChunk.EMPTY;
+    }
+
+    @Override
+    public Map<String, String> combinePageMetadata(
+        String groupKey,
+        Map<String, String> accumulated,
+        Map<String, String> pageMetadata) {
+        long previous = Long.parseLong(accumulated.getOrDefault("recordCount", "0"));
+        long current = Long.parseLong(pageMetadata.getOrDefault("recordCount", "0"));
+        return Map.of("recordCount", String.valueOf(Math.addExact(previous, current)));
+    }
 
     @Override
     public String groupKey(org.pipelineframework.csv.domain.PaymentOutput item) {

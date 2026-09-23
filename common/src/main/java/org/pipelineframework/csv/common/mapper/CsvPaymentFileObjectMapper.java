@@ -18,6 +18,13 @@ public final class CsvPaymentFileObjectMapper implements ObjectSnapshotMapper<Cs
             throw new IllegalArgumentException("CSV filesystem object snapshot must expose localPath");
         }
         Path file = Path.of(localPath);
-        return new CsvPaymentsInputFile(file, file.getParent());
+        String sourceIdentity = snapshot.etag();
+        if (sourceIdentity == null || sourceIdentity.isBlank()) {
+            sourceIdentity = snapshot.versionId();
+        }
+        if (sourceIdentity == null || sourceIdentity.isBlank()) {
+            throw new IllegalArgumentException("CSV object snapshot must expose etag or versionId for paging");
+        }
+        return new CsvPaymentsInputFile(file, file.getParent(), sourceIdentity);
     }
 }

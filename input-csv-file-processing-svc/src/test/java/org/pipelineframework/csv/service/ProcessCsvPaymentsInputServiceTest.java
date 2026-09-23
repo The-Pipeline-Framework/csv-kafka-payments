@@ -162,6 +162,6 @@ class ProcessCsvPaymentsInputServiceTest {
     }
 
     private CsvPaymentsInputFile inputFile(Path path) {
-        return new CsvPaymentsInputFile(path, path.getParent());
+        return new CsvPaymentsInputFile(path, path.getParent(), "test:" + path);
     }
 }
