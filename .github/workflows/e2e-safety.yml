@@ -1,0 +1,130 @@
+name: CSV deployment and observability E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * 1-5'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: CSV ${{ matrix.lane }} E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [monolith, pipeline-runtime-persistence, provider-reject, tempo]
+    env:
+      MAVEN_OPTS: -Xmx1g -Xms512m
+      MAVEN_ARGS: -B --no-transfer-progress -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+      MAVEN_REPOSITORY: ${{ github.workspace }}/.m2/repository
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-path: ${{ github.workspace }}/.m2/repository
+
+      - name: Set up Testcontainers
+        uses: ./.github/actions/setup-testcontainers
+        with:
+          images: |
+            postgres:17
+            apache/kafka-native:3.8.0
+            testcontainers/ryuk:0.13.0
+            alpine:3.17
+
+      - name: Build the selected application layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ matrix.lane }}' in
+            monolith)
+              ./build-monolith.sh -DskipTests -Dquarkus.container-image.build=true
+              ;;
+            pipeline-runtime-persistence)
+              ./build-pipeline-runtime.sh -DskipTests -Dquarkus.container-image.build=true
+              ;;
+            provider-reject)
+              ./build-modular-telemetry-images.sh
+              ;;
+            tempo)
+              ./build-modular-observability-images.sh
+              ;;
+          esac
+
+      - name: Run the selected E2E proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ matrix.lane }}' in
+            monolith)
+              cp config/runtime-mapping/monolith.yaml config/pipeline.runtime.yaml
+              ;;
+            pipeline-runtime-persistence)
+              cp config/runtime-mapping/pipeline-runtime.yaml config/pipeline.runtime.yaml
+              ;;
+            provider-reject|tempo)
+              cp config/runtime-mapping/modular-strict.yaml config/pipeline.runtime.yaml
+              ;;
+          esac
+          maven=(./mvnw -B --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
+            -f pom.xml -pl orchestrator-svc -am -Dquarkus.container-image.build=false
+            -Dsurefire.failIfNoSpecifiedTests=false -Dfailsafe.failIfNoSpecifiedTests=false)
+          case '${{ matrix.lane }}' in
+            monolith)
+              "${maven[@]}" -Dcsv.runtime.layout=monolith -Dcsv.e2e.pipeline.wait.seconds=120 \
+                '-Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks' verify
+              ;;
+            pipeline-runtime-persistence)
+              "${maven[@]}" -Dcsv.runtime.layout=pipeline-runtime -Dcsv.e2e.pipeline.wait.seconds=240 \
+                -Dtest=PipelineRuntimeTopologyTest,CsvPaymentsAwaitPersistenceScopeTest \
+                '-Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT#fullPipelineWorks' verify
+              ;;
+            provider-reject)
+              "${maven[@]}" -Dcsv.e2e.prebuilt.modular.images=true \
+                -Dcsv.e2e.telemetry.enabled=true \
+                -Dcsv.e2e.telemetry.happy-path-only=false \
+                -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
+                -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+                -Dtest=CsvPaymentsProviderRejectEndToEndIT test
+              ;;
+            tempo)
+              "${maven[@]}" -Dcsv.e2e.prebuilt.modular.images=true \
+                -Dcsv.e2e.tempo.enabled=true \
+                -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_12.csv \
+                -Dcsv.e2e.pipeline.wait.seconds=900 -Dcsv.e2e.orchestrator.wait.seconds=900 \
+                '-Dit.test=CsvPaymentsTempoVerificationEndToEndIT#tempoSpansReachLgtm' verify
+              ;;
+          esac
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: csv-${{ matrix.lane }}-e2e-evidence
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**
+            orchestrator-svc/target/test-e2e/**
+          retention-days: 7
+          if-no-files-found: warn

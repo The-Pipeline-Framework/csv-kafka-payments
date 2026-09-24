@@ -35,6 +35,20 @@ cp "$MODULAR_MAPPING" "$ACTIVE_MAPPING"
 cd "$ROOT_DIR"
 
 IMAGE_TAG="${CSV_E2E_TELEMETRY_IMAGE_TAG:-otel}"
+MAVEN_REPOSITORY="${MAVEN_REPOSITORY:-$ROOT_DIR/.m2/repository}"
+PROVENANCE_FILE="$MAVEN_REPOSITORY/org/pipelineframework/tpf-worktree-provenance.properties"
+
+MAVEN_REPOSITORY="$MAVEN_REPOSITORY" "$CSV_DIR/ensure-framework-artifact-provenance.sh"
+
+property_value() {
+  local key="$1"
+  sed -n "s/^${key}=//p" "$PROVENANCE_FILE"
+}
+
+FRAMEWORK_VERSION="$(property_value 'framework.version')"
+FRAMEWORK_COMMIT="$(property_value 'framework.commit')"
+FRAMEWORK_SOURCE_FINGERPRINT="$(property_value 'framework.source.fingerprint')"
+FRAMEWORK_RUNTIME_SHA256="$(property_value 'framework.runtime.sha256')"
 
 resolve_default_image_platforms() {
   local docker_arch
@@ -98,8 +112,13 @@ verify_image_architecture() {
 # Jib writes shared cache metadata during image packaging; keep this reactor serialized
 # unless a caller explicitly opts into parallelism.
 ./mvnw -T "$MAVEN_IMAGE_THREADS" -f pom.xml -DskipTests clean package \
+  -Dmaven.repo.local="$MAVEN_REPOSITORY" \
   -Dtpf.build.transport=GRPC \
   -Dquarkus.container-image.tag="${IMAGE_TAG}" \
+  "-Dquarkus.container-image.labels.\"tpf_framework_version\"=${FRAMEWORK_VERSION}" \
+  "-Dquarkus.container-image.labels.\"tpf_framework_commit\"=${FRAMEWORK_COMMIT}" \
+  "-Dquarkus.container-image.labels.\"tpf_framework_source_fingerprint\"=${FRAMEWORK_SOURCE_FINGERPRINT}" \
+  "-Dquarkus.container-image.labels.\"tpf_framework_runtime_sha256\"=${FRAMEWORK_RUNTIME_SHA256}" \
   -Dquarkus.jib.platforms="${IMAGE_PLATFORMS}" \
   -Dquarkus.otel.enabled=true \
   -Dquarkus.otel.sdk.disabled=false \

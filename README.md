@@ -66,6 +66,32 @@ This is the advanced stream-await self-host HA reference. It uses SQS by default
 
 ## Running End-to-End Tests
 
+### CI safety lanes
+
+The repository owns its deployment and observability checks in
+`.github/workflows/e2e-safety.yml`. Pull requests targeting `main`, pushes to
+`main`, and the weekday 04:00 UTC schedule run four independent jobs:
+
+| Lane | Proof |
+| --- | --- |
+| Monolith | Builds the single-process image and runs the CSV happy-path E2E. |
+| Pipeline runtime and persistence | Builds the grouped pipeline runtime and separate persistence service, checks the topology and persistence configuration, then runs the E2E that verifies output rows and database persistence. |
+| Provider rejection | Builds telemetry-enabled modular images and checks deterministic rejected and approved output rows and replay capture. |
+| Tempo | Builds observability-enabled modular images and checks that traces and metrics reach LGTM/Tempo. |
+
+`.github/workflows/native-builds.yml` builds native executables for the
+orchestrator, CSV input, payment processing, and payment status services on
+`main`, on the Sunday 05:00 UTC schedule, and by manual dispatch. It is not a
+pull-request gate because each native compilation is substantially more
+expensive than the JVM E2E jobs. Both workflows resolve released TPF artifacts
+into this repository's `.m2/repository`; neither checks out framework sources.
+The ordinary `ci.yml` job runs the Maven unit-test reactor, including the CSV
+telemetry dashboard contract, on pull requests, `main`, and manual dispatch.
+The self-hosted HA workflow runs on pull requests and manual dispatch; the HA
+scale workflow runs on `main`, weekdays at 03:00 UTC, and manual dispatch.
+HA and scale failures are separate from the application layout and
+observability jobs above.
+
 To run the end-to-end integration test that starts all services and processes a sample CSV file:
 
 1. Ensure you have Java 21 and Maven installed
@@ -589,19 +615,29 @@ java -jar orchestrator-svc/target/orchestrator-svc-1.0.jar --ingest-once
 
 #### Running in Native Mode
 
-To build and run in native mode for better performance:
+The native CI workflow builds the four runnable services independently. To
+build the same executables locally with Docker available:
 
 ```bash
-# Build all services in native mode
-mvn clean package -Pnative
+for service in orchestrator-svc input-csv-file-processing-svc payments-processing-svc payment-status-svc; do
+  native_args=--enable-preview
+  if [ "$service" = input-csv-file-processing-svc ]; then
+    native_args=--enable-preview,--initialize-at-run-time=org.apache.commons.logging.impl.Log4jApiLogFactory
+  fi
+  ./mvnw -B -f pom.xml -pl "$service" -am -DskipTests \
+    -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true \
+    -Dquarkus.native.container-build=true \
+    "-Dquarkus.native.additional-build-args=$native_args" \
+    -Dmaven.repo.local="$PWD/.m2/repository" package
+done
 
 # Start each service in a separate terminal
-./input-csv-file-processing-svc/target/input-csv-file-processing-svc-1.0-runner
-./payments-processing-svc/target/payments-processing-svc-1.0-runner
-./payment-status-svc/target/payment-status-svc-1.0-runner
+./input-csv-file-processing-svc/target/*-runner
+./payments-processing-svc/target/*-runner
+./payment-status-svc/target/*-runner
 
 # Run the orchestrator-svc as a CLI application (after all services are up)
-./orchestrator-svc/target/orchestrator-svc-1.0-runner --ingest-once
+./orchestrator-svc/target/*-runner --ingest-once
 
 # Note: You'll need to stop each service manually in each terminal
 ```
