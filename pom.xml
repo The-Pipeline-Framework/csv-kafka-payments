@@ -62,6 +62,7 @@
     </modules>
 
     <properties>
+        <pipelineframework.bom.version>26.9.4-SNAPSHOT</pipelineframework.bom.version>
         <pipelineframework.compiler.version>26.9.4-SNAPSHOT</pipelineframework.compiler.version>
         <pipelineframework.runtime.version>26.9.4-SNAPSHOT</pipelineframework.runtime.version>
         <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
@@ -137,8 +138,8 @@
             <!-- Pipeline Framework BOM -->
             <dependency>
                 <groupId>org.pipelineframework</groupId>
-                <artifactId>framework-parent</artifactId>
-                <version>${project.version}</version>
+                <artifactId>pipelineframework-bom</artifactId>
+                <version>${pipelineframework.bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
