@@ -57,6 +57,36 @@ class OpenCsvPagedPaymentSourceTest {
   }
 
   @Test
+  void resumesAfterCrLfAtTheNextLogicalRecord() throws Exception {
+    Path csv = tempDir.resolve("payments-crlf.csv");
+    Files.writeString(csv, "ID,Recipient,Amount,Currency\r\n"
+        + "first,A,1.00,EUR\r\n"
+        + "second,B,2.00,EUR\r\n");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-crlf");
+    OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
+
+    PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
+        input, "execution-source", Optional.empty(), 1));
+    DemandSubscriber firstSubscriber = new DemandSubscriber();
+    first.items().subscribe(firstSubscriber);
+    firstSubscriber.subscription.request(1);
+    var firstCompletion = first.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    PagedSourceStream<PaymentRecord> second = source.open(new PagedSourceRequest<>(
+        input, "execution-source", firstCompletion.nextCheckpoint(), 1));
+    DemandSubscriber secondSubscriber = new DemandSubscriber();
+    second.items().subscribe(secondSubscriber);
+    secondSubscriber.subscription.request(1);
+    var secondCompletion = second.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    assertEquals(List.of("first"), firstSubscriber.items.stream().map(PaymentRecord::getCsvId).toList());
+    assertEquals(List.of("second"), secondSubscriber.items.stream().map(PaymentRecord::getCsvId).toList());
+    assertEquals(1, firstCompletion.consumedRecords());
+    assertEquals(1, secondCompletion.consumedRecords());
+    assertTrue(secondCompletion.exhausted());
+  }
+
+  @Test
   void rejectsCheckpointWhenPinnedSnapshotChanges() throws Exception {
     Path csv = tempDir.resolve("payments.csv");
     Files.writeString(csv, "ID,Recipient,Amount,Currency\nfirst,A,1.00,EUR\nsecond,B,2.00,EUR\n");

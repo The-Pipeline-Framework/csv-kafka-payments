@@ -116,7 +116,8 @@ final class OpenCsvPagedPaymentSource {
     private void drain() {
       while (!terminated && demand > 0) {
         if (consumed == request.maxRecords()) {
-          finish(source.position() >= start.version().sizeBytes());
+          long boundary = source.recordBoundaryPosition();
+          finish(boundary >= start.version().sizeBytes(), boundary);
           return;
         }
         String[] row;
@@ -127,13 +128,14 @@ final class OpenCsvPagedPaymentSource {
           return;
         }
         if (row == null) {
-          finish(true);
+          finish(true, source.position());
           return;
         }
+        long boundary = source.recordBoundaryPosition();
         consumed++;
         if (isEmpty(row)) {
           if (consumed == request.maxRecords()) {
-            finish(source.position() >= start.version().sizeBytes());
+            finish(boundary >= start.version().sizeBytes(), boundary);
           }
           continue;
         }
@@ -150,7 +152,7 @@ final class OpenCsvPagedPaymentSource {
         demand--;
         downstream.onNext(item);
         if (!terminated && consumed == request.maxRecords()) {
-          finish(source.position() >= start.version().sizeBytes());
+          finish(boundary >= start.version().sizeBytes(), boundary);
           return;
         }
       }
@@ -166,9 +168,8 @@ final class OpenCsvPagedPaymentSource {
       completion.completeExceptionally(new CancellationException("paged CSV source cancelled"));
     }
 
-    private void finish(boolean exhausted) {
+    private void finish(boolean exhausted, long nextOffset) {
       terminated = true;
-      long nextOffset = source.position();
       try {
         reader.close();
         downstream.onComplete();
@@ -218,7 +219,7 @@ final class OpenCsvPagedPaymentSource {
       if (reader.readNext() == null) {
         throw new IllegalArgumentException("CSV source is missing its header: " + path);
       }
-      return source.position();
+      return source.recordBoundaryPosition();
     } catch (Exception failure) {
       throw new IllegalArgumentException("Unable to locate CSV header boundary in " + path, failure);
     }
@@ -314,19 +315,34 @@ final class OpenCsvPagedPaymentSource {
 
   /** UTF-8 reader that never reads beyond the character requested by OpenCSV's line reader. */
   private static final class CursorUtf8Reader extends Reader {
+    private static final int BUFFER_SIZE = 8 * 1024;
     private final FileChannel channel;
+    private final ByteBuffer bytes = ByteBuffer.allocate(BUFFER_SIZE);
+    private long logicalPosition;
     private int pendingLowSurrogate = -1;
+    private int lastCharacter = -1;
 
     private CursorUtf8Reader(Path path, long offset) throws IOException {
       channel = FileChannel.open(path, StandardOpenOption.READ);
       channel.position(offset);
+      logicalPosition = offset;
+      bytes.limit(0);
     }
 
     long position() {
+      return logicalPosition;
+    }
+
+    long recordBoundaryPosition() {
       try {
-        return channel.position();
+        if (lastCharacter == '\r' && peekByte() == '\n') {
+          bytes.get();
+          logicalPosition++;
+          lastCharacter = '\n';
+        }
+        return logicalPosition;
       } catch (IOException failure) {
-        throw new IllegalStateException("Unable to read CSV cursor position", failure);
+        throw new IllegalStateException("Unable to locate CSV record boundary", failure);
       }
     }
 
@@ -348,7 +364,7 @@ final class OpenCsvPagedPaymentSource {
       if (pendingLowSurrogate >= 0) {
         int value = pendingLowSurrogate;
         pendingLowSurrogate = -1;
-        return value;
+        return track(value);
       }
       int first = readByte();
       if (first < 0) {
@@ -358,7 +374,7 @@ final class OpenCsvPagedPaymentSource {
       int minimum;
       int continuationCount;
       if ((first & 0x80) == 0) {
-        return first;
+        return track(first);
       } else if ((first & 0xE0) == 0xC0) {
         codePoint = first & 0x1F;
         minimum = 0x80;
@@ -386,16 +402,41 @@ final class OpenCsvPagedPaymentSource {
         throw new IOException("Invalid UTF-8 code point in CSV source");
       }
       if (codePoint <= 0xFFFF) {
-        return codePoint;
+        return track(codePoint);
       }
       int adjusted = codePoint - 0x10000;
       pendingLowSurrogate = 0xDC00 | (adjusted & 0x3FF);
-      return 0xD800 | (adjusted >>> 10);
+      return track(0xD800 | (adjusted >>> 10));
     }
 
     private int readByte() throws IOException {
-      ByteBuffer one = ByteBuffer.allocate(1);
-      return channel.read(one) < 0 ? -1 : one.array()[0] & 0xFF;
+      if (!bytes.hasRemaining() && !refill()) {
+        return -1;
+      }
+      logicalPosition++;
+      return bytes.get() & 0xFF;
+    }
+
+    private int peekByte() throws IOException {
+      if (!bytes.hasRemaining() && !refill()) {
+        return -1;
+      }
+      return bytes.get(bytes.position()) & 0xFF;
+    }
+
+    private boolean refill() throws IOException {
+      bytes.clear();
+      int read;
+      do {
+        read = channel.read(bytes);
+      } while (read == 0);
+      bytes.flip();
+      return read > 0;
+    }
+
+    private int track(int character) {
+      lastCharacter = character;
+      return character;
     }
 
     @Override
