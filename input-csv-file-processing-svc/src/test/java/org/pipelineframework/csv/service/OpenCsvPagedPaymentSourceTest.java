@@ -87,6 +87,65 @@ class OpenCsvPagedPaymentSourceTest {
   }
 
   @Test
+  void crLfBoundaryDoesNotSkipTheFollowingEmptyLogicalRecord() throws Exception {
+    Path csv = tempDir.resolve("payments-crlf-empty.csv");
+    Files.writeString(csv, "ID,Recipient,Amount,Currency\r\n"
+        + "first,A,1.00,EUR\r\n"
+        + "\r\n"
+        + "second,B,2.00,EUR\r\n");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-crlf-empty");
+    OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
+
+    PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
+        input, "execution-source", Optional.empty(), 1));
+    DemandSubscriber firstSubscriber = new DemandSubscriber();
+    first.items().subscribe(firstSubscriber);
+    firstSubscriber.subscription.request(1);
+    var firstCompletion = first.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    PagedSourceStream<PaymentRecord> empty = source.open(new PagedSourceRequest<>(
+        input, "execution-source", firstCompletion.nextCheckpoint(), 1));
+    DemandSubscriber emptySubscriber = new DemandSubscriber();
+    empty.items().subscribe(emptySubscriber);
+    emptySubscriber.subscription.request(1);
+    var emptyCompletion = empty.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    PagedSourceStream<PaymentRecord> last = source.open(new PagedSourceRequest<>(
+        input, "execution-source", emptyCompletion.nextCheckpoint(), 1));
+    DemandSubscriber lastSubscriber = new DemandSubscriber();
+    last.items().subscribe(lastSubscriber);
+    lastSubscriber.subscription.request(1);
+    var lastCompletion = last.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    PagedSourceStream<PaymentRecord> wideFirst = source.open(new PagedSourceRequest<>(
+        input, "execution-source-wide", Optional.empty(), 2));
+    DemandSubscriber wideFirstSubscriber = new DemandSubscriber();
+    wideFirst.items().subscribe(wideFirstSubscriber);
+    wideFirstSubscriber.subscription.request(2);
+    var wideFirstCompletion = wideFirst.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    PagedSourceStream<PaymentRecord> wideLast = source.open(new PagedSourceRequest<>(
+        input, "execution-source-wide", wideFirstCompletion.nextCheckpoint(), 2));
+    DemandSubscriber wideLastSubscriber = new DemandSubscriber();
+    wideLast.items().subscribe(wideLastSubscriber);
+    wideLastSubscriber.subscription.request(2);
+    var wideLastCompletion = wideLast.completion().toCompletableFuture().get(5, TimeUnit.SECONDS);
+
+    assertEquals(List.of("first"), firstSubscriber.items.stream().map(PaymentRecord::getCsvId).toList());
+    assertTrue(emptySubscriber.items.isEmpty());
+    assertEquals(List.of("second"), lastSubscriber.items.stream().map(PaymentRecord::getCsvId).toList());
+    assertEquals(1, firstCompletion.consumedRecords());
+    assertEquals(1, emptyCompletion.consumedRecords());
+    assertEquals(1, lastCompletion.consumedRecords());
+    assertTrue(lastCompletion.exhausted());
+    assertEquals(List.of("first"), wideFirstSubscriber.items.stream().map(PaymentRecord::getCsvId).toList());
+    assertEquals(List.of("second"), wideLastSubscriber.items.stream().map(PaymentRecord::getCsvId).toList());
+    assertEquals(2, wideFirstCompletion.consumedRecords());
+    assertEquals(1, wideLastCompletion.consumedRecords());
+    assertTrue(wideLastCompletion.exhausted());
+  }
+
+  @Test
   void rejectsCheckpointWhenPinnedSnapshotChanges() throws Exception {
     Path csv = tempDir.resolve("payments.csv");
     Files.writeString(csv, "ID,Recipient,Amount,Currency\nfirst,A,1.00,EUR\nsecond,B,2.00,EUR\n");

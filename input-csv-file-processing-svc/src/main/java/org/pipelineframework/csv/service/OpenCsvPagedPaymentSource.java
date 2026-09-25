@@ -336,9 +336,7 @@ final class OpenCsvPagedPaymentSource {
     long recordBoundaryPosition() {
       try {
         if (lastCharacter == '\r' && peekByte() == '\n') {
-          bytes.get();
-          logicalPosition++;
-          lastCharacter = '\n';
+          return logicalPosition + 1;
         }
         return logicalPosition;
       } catch (IOException failure) {
