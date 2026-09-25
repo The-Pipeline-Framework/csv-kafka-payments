@@ -20,6 +20,25 @@ Block, or Expansion semantics.
 Keep transport, runtime layout, and build topology distinct. Kafka owns the durable external-provider request and
 completion boundary; it is not a TPF step transport.
 
+## Cross-repository system tests
+
+Owner-local verification is the first gate. `.github/tpf-system-tests.json` owns the stable smoke, HA, HA-scale and
+native suite commands. `TPF Candidate Build` and the trusted publisher create an immutable, source-only candidate
+manifest; `tpf/system-tests` records compatibility evidence on that exact source SHA.
+
+For a coordinated change, wait for `TPF Candidate Publish` to succeed for the current head SHA of every
+participating pull request. Then run `TPF System Tests — Compatibility Set` in
+`The-Pipeline-Framework/pipelineframework` with one stable set ID and the pull-request URLs. Any new commit
+invalidates the previous set: wait for its new candidate publisher and dispatch again. Do not substitute snapshots,
+branch heads, source checkouts or a composite Maven reactor. See the canonical
+[cross-repository system-test runbook](https://github.com/The-Pipeline-Framework/pipelineframework/blob/main/docs/evolve/cross-repository-system-tests.md).
+
+Repository setup requires repository-scoped dispatch credentials. If the workflow exposes them as
+`SYSTEM_TEST_APP_ID` and `SYSTEM_TEST_APP_PRIVATE_KEY`, they must belong to a dispatch-only App installed solely on
+`pipelineframework`, never the coordinator App. This source-only publisher does not need Maven package authority;
+fork publication additionally requires the
+`safe-to-system-test` label. Never expose dispatch or status credentials to owner-suite jobs.
+
 ## Build
 
 Every Maven command must use the repository-local cache:
