@@ -28,7 +28,7 @@ This application demonstrates modern microservices architecture patterns using g
 The canonical modular flow is:
 
 1. Object Ingest admits matching CSV objects into queue-async executions.
-2. `Process Csv Payments Input` incrementally reads CSV rows from the admitted object reference.
+2. `Process Csv Payments Input` opens the pinned object snapshot in pages of 1,000 logical OpenCSV records. The user still submits one CSV object; quoted multiline and UTF-8 records stay parser-valid across provider-opaque checkpoints.
 3. `Process Csv Payments Input` is an authored expansion operation with `await:`; every emitted `PaymentRecord` becomes one trusted request and one durable completion interaction.
 4. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
 5. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
@@ -256,11 +256,13 @@ cd <repo-root>
   verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-It provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks the 10k stage counts, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget. The journey covers pipeline run, transition dispatch, Await interaction creation, provider dispatch, completion admission, live handoff, scalar continuation, and terminal publication.
+It submits the single `payments_10k.csv` source without pre-splitting it. The configured `paging.maxRecords: 1000` bounds source replay and transition ownership while each page remains demand-driven. The proof provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks exactly 10,000 stable outputs, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget. The journey covers page progression, pipeline run, transition dispatch, Await interaction creation, provider dispatch, completion admission, live handoff, scalar continuation, page-part publication, and final-object composition.
 
 ### Object I/O Backpressure
 
-The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into a queue-async execution, the CSV parser emits rows incrementally, Kafka await completions flow through a live await session when the transition is active, and Object Publish writes terminal rows through a streaming target session. The default path does not configure the CSV reader demand pacer.
+The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into one user-visible queue-async execution. The coordinator opens one bounded source page at a time; the CSV parser emits rows only on downstream demand, Kafka await completions flow through a live await session when the transition is active, and Object Publish writes attempt-safe page parts through a streaming target session. After source exhaustion, Object Publish composes the parts in page order into the existing single output object. The default path does not configure the CSV reader demand pacer.
+
+The page bound counts every logical source record consumed, including a blank or rejected record; the CSV header does not count. Page checkpoints are internal to the OpenCSV provider and pin file identity, size, and modification time. A mismatch fails deterministically. Failure or cancellation reopens the same page start, while completed pages are not reread.
 
 The deprecated file-step path can still use `BlockingIteratorPacer` as a legacy fallback. It is a blocking-thread throttle, not end-to-end reactive backpressure, and should not be used as the primary CSV Payments proof path.
 

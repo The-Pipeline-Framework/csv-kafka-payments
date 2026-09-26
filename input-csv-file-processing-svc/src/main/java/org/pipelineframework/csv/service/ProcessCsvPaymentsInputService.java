@@ -28,12 +28,22 @@ import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
 import org.pipelineframework.csv.common.domain.FilePathAwareMappingStrategy;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.opencsv.OpenCsvInputBoundary;
+import org.pipelineframework.opencsv.PagedOpenCsvInputBoundary;
+import org.pipelineframework.paging.PagedSourceRequest;
+import org.pipelineframework.paging.PagedSourceStream;
 
 @ApplicationScoped
 public class ProcessCsvPaymentsInputService
-    implements OpenCsvInputBoundary<CsvPaymentsInputFile, org.pipelineframework.csv.common.domain.PaymentRecord> {
+    implements PagedOpenCsvInputBoundary<CsvPaymentsInputFile, org.pipelineframework.csv.common.domain.PaymentRecord> {
 
   private static final Logger LOG = Logger.getLogger(ProcessCsvPaymentsInputService.class);
+  private final OpenCsvPagedPaymentSource pagedSource = new OpenCsvPagedPaymentSource();
+
+  @Override
+  public PagedSourceStream<org.pipelineframework.csv.common.domain.PaymentRecord> openPage(
+      PagedSourceRequest<CsvPaymentsInputFile> request) {
+    return pagedSource.open(request);
+  }
 
   /**
    * Open a blocking iterator over the CSV records without materializing the full file in memory.
