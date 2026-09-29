@@ -1024,6 +1024,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!mavenRepoLocal.isBlank()) {
             command.add("-Dmaven.repo.local=" + mavenRepoLocal);
         }
+        command.addAll(FrameworkMavenVersionArguments.from(System.getProperties()));
 
         try {
             if (!runtimeMappingsMatch(activeRuntimeMapping, desiredRuntimeMapping)) {
