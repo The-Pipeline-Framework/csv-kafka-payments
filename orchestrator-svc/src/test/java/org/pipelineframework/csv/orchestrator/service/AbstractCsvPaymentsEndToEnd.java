@@ -139,7 +139,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final boolean TELEMETRY_ENABLED =
             Boolean.getBoolean("csv.e2e.telemetry.enabled");
     private static final boolean TELEMETRY_CAPTURE_ACTIVE =
-            TELEMETRY_ENABLED && !MONOLITH_LAYOUT && !PIPELINE_RUNTIME_LAYOUT;
+            TELEMETRY_ENABLED && !PIPELINE_RUNTIME_LAYOUT;
     private static final boolean TEMPO_ENABLED =
             Boolean.getBoolean("csv.e2e.tempo.enabled");
     private static final boolean TEMPO_VERIFICATION_ACTIVE =
@@ -608,7 +608,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!TELEMETRY_CAPTURE_ACTIVE) {
             if (TELEMETRY_ENABLED) {
                 LOG.warnf(
-                        "CSV payments OTel telemetry capture currently supports only the modular layout; active layout is %s.",
+                        "CSV payments OTel telemetry capture is unavailable for layout %s.",
                         RUNTIME_LAYOUT);
             }
             return;
@@ -1371,7 +1371,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
         assumeTrue(
                 TELEMETRY_CAPTURE_ACTIVE,
-                "Provider-reject replay assertions require telemetry capture in modular layout.");
+                "Provider-reject replay assertions require telemetry capture.");
         assumeFalse(
                 TELEMETRY_HAPPY_PATH_ONLY,
                 "Telemetry capture mode runs only the happy-path E2E by default.");
@@ -2205,9 +2205,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
         LOG.infof("Total records across all output files: %d", totalRecords);
 
         long expectedRecords = expectedPaymentRecordCount();
-        assertTrue(
-                totalRecords >= expectedRecords,
-                String.format("Expected at least %d records, but found %d", expectedRecords, totalRecords));
+        assertEquals(expectedRecords, totalRecords,
+                String.format("Expected exactly %d records, but found %d", expectedRecords, totalRecords));
 
         if (CUSTOM_INPUT_FILE) {
             LOG.info("Custom input output record count verified");
@@ -3142,7 +3141,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                     "Expected merged replay to contain unapproved branch events.");
         }
         assertReplayMergeNode(replayDocument, "FinalizePaymentOutput");
-        assertReplayServiceEvents(replayDocument, "FinalizePaymentOutput", "ProcessFinalizePaymentOutputService");
+        if (hasReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput")) {
+            assertReplayStepEvents(replayDocument, "ProcessFinalizePaymentOutput");
+        } else {
+            assertReplayServiceEvents(replayDocument, "FinalizePaymentOutput", "ProcessFinalizePaymentOutputService");
+        }
         assertReplayStepEvents(replayDocument, "PersistencePaymentRecordSideEffect");
         assertReplayStepEvents(replayDocument, "PersistencePaymentOutputSideEffect");
         assertReplayStepEvents(replayDocument, "ObjectIngest");
