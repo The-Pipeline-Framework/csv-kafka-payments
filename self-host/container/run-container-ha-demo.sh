@@ -371,6 +371,29 @@ if [[ "${PREPARE_IMAGES_ONLY}" == "true" ]]; then
   exit 0
 fi
 
+if [[ -z "${TPF_RELEASE_ARTIFACT:-}" ]]; then
+  TPF_RELEASE_ARTIFACT="$(python3 "${CLIENT}" locate-artifact \
+    --target-dir "${ORCHESTRATOR_DIR}/target" \
+    --pipeline-id "${TPF_PIPELINE_ID}")" || {
+      echo "Unable to locate CSV release artifact." >&2
+      exit 1
+    }
+fi
+export TPF_RELEASE_ARTIFACT
+
+python3 "${CLIENT}" create-release \
+  --pipeline-id "${TPF_PIPELINE_ID}" \
+  --artifact-path "${TPF_RELEASE_ARTIFACT}" \
+  --output "${TPF_RELEASE_DESCRIPTOR}"
+TPF_CSV_RELEASE_VERSION="$(python3 - "${TPF_RELEASE_DESCRIPTOR}" <<'PY'
+import json
+import sys
+from pathlib import Path
+print(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["releaseVersion"])
+PY
+)"
+export TPF_CSV_RELEASE_VERSION
+
 bash "${EXAMPLE_DIR}/generate-dev-certs.sh" >/dev/null
 
 "${SCRIPT_DIR}/bootstrap-localstack.sh"
@@ -400,21 +423,6 @@ python3 "${CLIENT}" wait-health \
   --base-url "http://localhost:${TPF_COORDINATOR_PORT}" \
   --name coordinator \
   --timeout-seconds 180
-
-if [[ -z "${TPF_RELEASE_ARTIFACT:-}" ]]; then
-  TPF_RELEASE_ARTIFACT="$(python3 "${CLIENT}" locate-artifact \
-    --target-dir "${ORCHESTRATOR_DIR}/target" \
-    --pipeline-id "${TPF_PIPELINE_ID}")" || {
-      echo "Unable to locate CSV release artifact." >&2
-      exit 1
-    }
-fi
-export TPF_RELEASE_ARTIFACT
-
-python3 "${CLIENT}" create-release \
-  --pipeline-id "${TPF_PIPELINE_ID}" \
-  --artifact-path "${TPF_RELEASE_ARTIFACT}" \
-  --output "${TPF_RELEASE_DESCRIPTOR}"
 
 python3 "${CLIENT}" register-activate \
   --base-url "http://localhost:${TPF_COORDINATOR_PORT}" \
