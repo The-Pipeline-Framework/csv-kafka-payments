@@ -33,6 +33,10 @@ EOF
       local exit_code=$?
       local transport=${TPF_CSV_AWAIT_TRANSPORT:-sqs}
       local compose=(-f self-host/container/compose.yaml)
+      # The demo runs in a child shell, so its Compose interpolation values do not
+      # propagate here. Supply them before collecting logs from a failed lane.
+      export TPF_REPO_ROOT="$repo_root"
+      export TPF_CSV_RELEASE_VERSION="${TPF_CSV_RELEASE_VERSION:-cleanup}"
       if [[ "$transport" == kafka ]]; then compose+=(-f self-host/container/compose.kafka.yaml); fi
       if (( exit_code != 0 )); then
         docker compose "${compose[@]}" ps >&2 || true

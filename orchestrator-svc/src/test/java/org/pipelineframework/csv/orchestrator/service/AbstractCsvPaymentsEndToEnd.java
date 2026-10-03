@@ -109,6 +109,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String PROVIDER_REQUESTS_GROUP_ENV = "CSV_PAYMENT_PROVIDER_REQUESTS_GROUP_ID";
     private static final String PROVIDER_REQUESTS_OFFSET_RESET_ENV = "CSV_PAYMENT_PROVIDER_REQUESTS_OFFSET_RESET";
     private static final String E2E_RESUME_TOKEN_SECRET = "csv-payments-e2e-resume-token-secret";
+    private static final String E2E_RELEASE_VERSION = "csv-payments-e2e";
     private static final Duration LGTM_STARTUP_TIMEOUT = Duration.ofMinutes(3);
     private static final Duration TEMPO_HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
@@ -413,6 +414,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                     BindMode.READ_ONLY)
                             .withExposedPorts(8444)
                             .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("PIPELINE_ORCHESTRATOR_RELEASE_VERSION", E2E_RELEASE_VERSION)
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
                             .withLogConsumer(containerLog("input-csv-file-processing-svc"))
                             .waitingFor(
@@ -535,6 +537,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                     BindMode.READ_ONLY)
                             .withExposedPorts(8445)
                             .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("PIPELINE_ORCHESTRATOR_RELEASE_VERSION", E2E_RELEASE_VERSION)
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
                             .withEnv("SERVER_KEYSTORE_PASSWORD", "secret")
                             .withEnv("CLIENT_TRUSTSTORE_PATH", CONTAINER_TRUSTSTORE_PATH)
@@ -1476,6 +1479,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "--ingest-once");
 
         pb.environment().put("QUARKUS_PROFILE", "test");
+        pb.environment().put("PIPELINE_ORCHESTRATOR_RELEASE_VERSION", E2E_RELEASE_VERSION);
         pb.environment().put("PIPELINE_CONFIG", writeE2ePipelineConfig().toString());
         pb.environment().put("PIPELINE_OBJECT_INGEST_AUTOSTART", "false");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
