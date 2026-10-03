@@ -205,9 +205,25 @@
                 </executions>
             </plugin>
             <plugin>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-release-maven-plugin</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
+                <configuration>
+                    <artifactKind>application-archive</artifactKind>
+                    <artifactFile>${project.build.directory}/quarkus-app</artifactFile>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>produce-application-release</id>
+                        <phase>verify</phase>
+                        <goals><goal>generate-release-descriptor</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>build-helper-maven-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.1</version>
                 <executions>
                     <execution>
                         <id>add-pipeline-generated-sources</id>
@@ -223,6 +239,21 @@
                             <sources>
                                 <source>${project.build.directory}/monolith-sources</source>
                             </sources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>attach-release-application-archive</id>
+                        <phase>verify</phase>
+                        <goals><goal>attach-artifact</goal></goals>
+                        <configuration>
+                            <skipAttach>${tpf.release.skip}</skipAttach>
+                            <artifacts>
+                                <artifact>
+                                    <file>${project.build.directory}/pipeline-release-artifacts/${project.artifactId}.zip</file>
+                                    <type>zip</type>
+                                    <classifier>application</classifier>
+                                </artifact>
+                            </artifacts>
                         </configuration>
                     </execution>
                 </executions>
@@ -255,7 +286,8 @@
                     </execution>
                 </executions>
             </plugin>
-        </plugins>
+
+    </plugins>
     </build>
 
 

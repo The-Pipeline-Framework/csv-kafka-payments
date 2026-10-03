@@ -61,6 +61,7 @@ types:
     fields:
       - [filepath, path]
       - [csvFolderPath, path]
+      - [sourceIdentity, string]
   PaymentRecord:
     fields:
       - [id, uuid]
