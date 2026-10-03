@@ -7,6 +7,13 @@ ACTIVE_MAPPING="$CSV_DIR/config/pipeline.runtime.yaml"
 MONOLITH_MAPPING="$CSV_DIR/config/runtime-mapping/monolith.yaml"
 MVN_BIN="${MVN_BIN:-$ROOT_DIR/mvnw}"
 
+# Publication uses the same monolith mapping and reactor; only the Maven lifecycle changes.
+MAVEN_GOAL=install
+if [[ "${1:-}" == "--deploy" ]]; then
+  MAVEN_GOAL=deploy
+  shift
+fi
+
 if [[ ! -x "$MVN_BIN" ]]; then
   echo "Maven launcher is not executable: $MVN_BIN" >&2
   exit 1
@@ -37,7 +44,7 @@ cp "$MONOLITH_MAPPING" "$ACTIVE_MAPPING"
 
 # Build orchestrator-svc first to generate LOCAL client sources and metadata used by monolith-svc.
 echo "Building orchestrator-svc to generate LOCAL client sources..."
-PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
+export PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
 
 ORCHESTRATOR_ARGS=()
 for arg in "$@"; do
@@ -63,4 +70,4 @@ fi
 "$MVN_BIN" -f "$CSV_DIR/pom.xml" -Dcsv.runtime.layout=monolith -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean compile -pl orchestrator-svc -am "${ORCHESTRATOR_ARGS[@]}"
 
 echo "Building monolith..."
-"$MVN_BIN" -f "$CSV_DIR/pom.xml" -pl common,monolith-svc -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+"$MVN_BIN" -f "$CSV_DIR/pom.xml" -pl common,monolith-svc -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean "$MAVEN_GOAL" "$@"

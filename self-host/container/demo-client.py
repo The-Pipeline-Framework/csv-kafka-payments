@@ -112,6 +112,9 @@ def create_release(args):
             f"Artifact pipelineId={contract.get('pipelineId')} does not match {args.pipeline_id}")
     digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
     release_version = args.release_version or contract["contractVersion"]
+    contract_capabilities = contract["capabilities"]
+    capabilities = (["local"] if contract_capabilities["localTransitionExecution"] else [])
+    capabilities.extend(contract_capabilities["transitionWorkerProtocols"])
     descriptor = {
         "schemaVersion": 1,
         "pipelineId": args.pipeline_id,
@@ -125,8 +128,7 @@ def create_release(args):
                 "uri": artifact_path.as_uri(),
                 "digest": f"sha256:{digest}",
                 "stepIds": [step.get("authoredName") for step in contract.get("steps", [])],
-                "capabilities": sorted(set(contract["capabilities"]["transitionWorkerProtocols"])
-                    | ({"local"} if contract["capabilities"]["localTransitionExecution"] else set())),
+                "capabilities": list(dict.fromkeys(capabilities)),
             }
         ],
     }

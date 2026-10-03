@@ -53,3 +53,6 @@ docker-compose.orchestrator.local.yml
 # UI Dashboard build output
 ui-dashboard/dist/
 ui-dashboard/node_modules/
+
+# Local CLI verification cache
+.tpf/

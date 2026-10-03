@@ -63,9 +63,11 @@
 
     <properties>
         <pipelineframework.bom.version>26.9.4-SNAPSHOT</pipelineframework.bom.version>
-        <pipelineframework.compiler.version>26.9.4-SNAPSHOT</pipelineframework.compiler.version>
-        <pipelineframework.runtime.version>26.9.4-SNAPSHOT</pipelineframework.runtime.version>
+        <pipelineframework.compiler.version>26.10.1-SNAPSHOT</pipelineframework.compiler.version>
+        <pipelineframework.runtime.version>26.10.1-SNAPSHOT</pipelineframework.runtime.version>
         <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
+        <!-- Release production is explicit; ordinary development verification stays unchanged. -->
+        <tpf.release.skip>true</tpf.release.skip>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -134,6 +136,12 @@
                 <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Keep transitive runtime consumers aligned with the declared runtime version. -->
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework</artifactId>
+                <version>${pipelineframework.runtime.version}</version>
             </dependency>
             <!-- Pipeline Framework BOM -->
             <dependency>

@@ -59,7 +59,9 @@ jobs:
           set -euo pipefail
           case '${{ matrix.lane }}' in
             monolith)
-              ./build-monolith.sh -DskipTests -Dquarkus.container-image.build=true
+              ./build-monolith.sh -DskipTests -Dquarkus.container-image.build=true \
+                -Dtpf.release.skip=false -Dtpf.release.version="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+                -Dtpf.release.allowLocalUris=true -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
               ;;
             pipeline-runtime-persistence)
               ./build-pipeline-runtime.sh -DskipTests -Dquarkus.container-image.build=true
@@ -71,6 +73,10 @@ jobs:
               ./build-modular-observability-images.sh
               ;;
           esac
+
+      - name: Check monolith Release archive
+        if: matrix.lane == 'monolith'
+        run: python3 scripts/check-release-artifacts.py monolith-svc
 
       - name: Run the selected E2E proof
         shell: bash

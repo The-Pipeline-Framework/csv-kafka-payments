@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import importlib.util
 import hashlib
+import json
+import zipfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +14,31 @@ MODULE_PATH = Path(__file__).with_name("demo-client.py")
 MODULE_SPEC = importlib.util.spec_from_file_location("csv_payments_demo_client", MODULE_PATH)
 demo_client = importlib.util.module_from_spec(MODULE_SPEC)
 MODULE_SPEC.loader.exec_module(demo_client)
+
+
+class DemoClientReleaseTest(unittest.TestCase):
+
+    def test_release_identifies_compiled_truth_and_encodes_file_uri(self):
+        with tempfile.TemporaryDirectory(prefix="release with spaces ") as directory:
+            artifact = Path(directory) / "pipeline runtime.jar"
+            output = Path(directory) / "pipeline-release.json"
+            contract = {"pipelineId": "org.pipelineframework.csv", "contractVersion": "contract-1",
+                        "steps": [{"authoredName": "ProcessCsvPaymentsInput"}],
+                        "capabilities": {"localTransitionExecution": True,
+                                         "transitionWorkerProtocols": ["local", "rest"]}}
+            with zipfile.ZipFile(artifact, "w") as archive:
+                archive.writestr("META-INF/pipeline/pipeline-contract.json", json.dumps(contract))
+            demo_client.create_release(SimpleNamespace(
+                artifact_path=str(artifact), output=str(output),
+                pipeline_id=contract["pipelineId"], release_version="release-1"))
+            descriptor = json.loads(output.read_text())
+            release_artifact = descriptor["artifacts"][0]
+            self.assertEqual(descriptor["compiledTruthArtifactId"], release_artifact["artifactId"])
+            self.assertEqual(release_artifact["uri"], artifact.resolve().as_uri())
+            self.assertIn("%20", release_artifact["uri"])
+            self.assertEqual(release_artifact["digest"], "sha256:" + hashlib.sha256(artifact.read_bytes()).hexdigest())
+            self.assertEqual(release_artifact["stepIds"], ["ProcessCsvPaymentsInput"])
+            self.assertEqual(release_artifact["capabilities"], ["local", "rest"])
 
 
 class DemoClientOutputValidationTest(unittest.TestCase):
