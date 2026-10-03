@@ -1328,7 +1328,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     @Test
-    void pipelineContinuesWhenMalformedCsvIsRejected() throws Exception {
+    void malformedCsvFailsItsPageWhileValidSourceCompletes() throws Exception {
         assumeTrue(runMalformedRejectScenario(), "Malformed reject scenario disabled for this E2E class.");
         assumeFalse(
                 TELEMETRY_CAPTURE_ACTIVE && TELEMETRY_HAPPY_PATH_ONLY,
@@ -1347,9 +1347,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "PIPELINE_DEFAULTS_RECOVER_ON_FAILURE", "true",
                 "PIPELINE_DEFAULTS_RETRY_LIMIT", "1",
                 "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
-                "PIPELINE_ITEM_REJECT_PROVIDER", "memory"));
+                "PIPELINE_ITEM_REJECT_PROVIDER", "memory"), false);
 
-        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS, runResult.output());
+        assertTrue(outputRecordCountReady(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS),
+            "The valid source should complete despite the malformed source failure.");
 
         Set<String> expectedRecipients = Set.of("Valid Recipient One", "Valid Recipient Two");
         verifyOutputFilesForRecipients(TEST_E2E_DIR, expectedRecipients, "Malformed Recipient", 2);
@@ -1360,11 +1361,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
             "Expected in-memory item reject sink evidence in orchestrator logs.");
         assertTrue(
             runResult.output().contains("ProcessCsvPaymentsInputGrpcClientStep")
-                || runResult.output().contains("ProcessCsvPaymentsInputService"),
+                || runResult.output().contains("ProcessCsvPaymentsInputService")
+                || runResult.output().contains("PagedSourceStepAdapter"),
             "Expected reject logs to reference ProcessCsvPaymentsInput step metadata.");
         assertTrue(
             runResult.output().contains("scope=STREAM"),
             "Expected stream-scope reject log entry for malformed CSV input.");
+        assertTrue(runResult.output().contains("CsvMalformedLineException"),
+            "An unterminated quoted record must fail without an advancing checkpoint.");
 
         LOG.info("Malformed-input reject-and-continue end-to-end test completed successfully!");
     }
@@ -1446,6 +1450,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private ProcessRunResult orchestratorTriggerRun(Map<String, String> envOverrides) throws Exception {
+        return orchestratorTriggerRun(envOverrides, true);
+    }
+
+    private ProcessRunResult orchestratorTriggerRun(Map<String, String> envOverrides, boolean expectSuccess)
+            throws Exception {
         LOG.info("Triggering Orchestrator object ingest once");
 
         String jarPath =
@@ -1554,10 +1563,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
         outputDrainer.join(TimeUnit.SECONDS.toMillis(5));
         int exitCode = p.exitValue();
         String output = processOutput.toString();
-        assertEquals(
-            0,
-            exitCode,
-            "Orchestrator exited with non-zero code. Output tail:\n" + tailLines(output, 200));
+        if (expectSuccess) {
+            assertEquals(0, exitCode,
+                "Orchestrator exited with non-zero code. Output tail:\n" + tailLines(output, 200));
+        } else {
+            assertNotEquals(0, exitCode,
+                "A parser-invalid CSV has no resumable record boundary and must fail its page.");
+        }
         return new ProcessRunResult(exitCode, output);
     }
 
