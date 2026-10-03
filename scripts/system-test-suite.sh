@@ -39,6 +39,11 @@ EOF
       export TPF_CSV_RELEASE_VERSION="${TPF_CSV_RELEASE_VERSION:-cleanup}"
       if [[ "$transport" == kafka ]]; then compose+=(-f self-host/container/compose.kafka.yaml); fi
       if (( exit_code != 0 )); then
+        if [[ "$suite" == ha-scale ]]; then
+          # Java prints thread dumps for SIGQUIT; capture both ends of a stalled page.
+          docker compose "${compose[@]}" kill --signal=SIGQUIT worker runtime >&2 || true
+          sleep 2
+        fi
         docker compose "${compose[@]}" ps >&2 || true
         docker compose "${compose[@]}" logs --no-color --tail=500 >&2 || true
         if [[ "$suite" == ha-scale ]]; then
