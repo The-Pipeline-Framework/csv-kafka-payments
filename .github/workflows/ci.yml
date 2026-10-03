@@ -38,6 +38,9 @@ jobs:
       - name: Check release build lifecycle
         run: python3 scripts/test-release-build.py
 
+      - name: Check release verifier
+        run: python3 scripts/test_release_artifacts.py
+
       - name: Produce and check monolith Release
         run: |
           ./build-monolith.sh -DskipTests -Dquarkus.container-image.build=false -Dtpf.release.skip=false -Dtpf.release.version="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -Dtpf.release.allowLocalUris=true -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
