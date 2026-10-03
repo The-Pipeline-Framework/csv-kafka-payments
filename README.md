@@ -865,3 +865,43 @@ contribute to the documentation or run it locally, see [docs/README.md](../../do
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](../../LICENSE) file for details.
+
+
+## Produce a monolith Release
+
+The existing monolith build can produce a closed application Release: one ZIP contains the complete Quarkus fast-JAR,
+its runtime dependencies and compiler-produced `META-INF/pipeline/` metadata. Ordinary verification skips release
+production. Enable it explicitly and supply an immutable Release version:
+
+```sh
+./build-monolith.sh -Dquarkus.container-image.build=false \
+  -Dtpf.release.skip=false -Dtpf.release.version=local-1 -Dtpf.release.allowLocalUris=true \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+tpf release verify --release monolith-svc/target/pipeline-release.json
+```
+
+The descriptor is `monolith-svc/target/pipeline-release.json`; its ZIP is
+`monolith-svc/target/pipeline-release-artifacts/monolith-svc.zip`. Local `file:` URIs are not promotable.
+Kafka, PostgreSQL and other external services remain deployment prerequisites.
+
+Keep the descriptor and ZIP together. If a rebuild changes the packaged bytes, choose a new Release version;
+the producer rejects replacement of an existing immutable Release identity.
+
+For a promotable Maven Release, first give the application reactor a non-SNAPSHOT version, for example `1.0.0`.
+Configure your standard Maven artefact repository and credentials, and publish the parent POM before the module build:
+
+```sh
+./mvnw -N deploy -Dmaven.deploy.skip=false -Dmaven.repo.local="$PWD/.m2/repository"
+./build-monolith.sh --deploy -Dquarkus.container-image.build=false -Dmaven.deploy.skip=false \
+  -Dtpf.release.skip=false -Dtpf.release.version=1.0.0 \
+  -Dtpf.release.artifactUri=maven:org.pipelineframework.csv:monolith-svc:zip:application:1.0.0 \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+The ZIP is attached with classifier `application`. `--deploy` runs standard Maven `deploy` instead of `install` while
+keeping the monolith mapping active. Descriptor generation stays in `verify`, before publication; Maven selects no
+Cloud target. Preserve the descriptor unchanged alongside the exact published ZIP. The CLI verifies or deploys it
+using external resolver and deployment configuration.
+This descriptor describes the monolith; the split-service layouts require their own complete multi-artefact descriptor.
+See [Release production](https://pipelineframework.org/deploy/release-descriptors) and
+[CLI deployment](https://pipelineframework.org/deploy/deployment-cli).
