@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,20 @@ MODULE_SPEC.loader.exec_module(demo_client)
 
 
 class DemoClientOutputValidationTest(unittest.TestCase):
+
+    def test_paged_submission_pins_source_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "payments.csv"
+            source.write_text("'CSV ID'\n'1'\n", encoding="utf-8")
+            args = SimpleNamespace(
+                pipeline_id="csv-payments", base_url="http://coordinator:8082",
+                tenant_id="tenant-1", control_plane_token="token",
+                release_descriptor_path="release.json", idempotency_key="fixed-key")
+            with patch.object(demo_client, "pipeline_input_transport_type", return_value="input"), \
+                    patch.object(demo_client, "request", return_value={"executionId": "exec-1"}) as request:
+                demo_client.submit_csv_input_file(args, source, demo_client.time.time() + 30)
+            payload = request.call_args.kwargs["body"]["inputPayload"]["payload"]
+            self.assertIn(hashlib.sha256(source.read_bytes()).hexdigest(), payload)
 
     def test_generated_output_requires_each_input_id_once(self):
         with tempfile.TemporaryDirectory() as directory:

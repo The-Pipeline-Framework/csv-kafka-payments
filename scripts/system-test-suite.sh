@@ -33,10 +33,28 @@ EOF
       local exit_code=$?
       local transport=${TPF_CSV_AWAIT_TRANSPORT:-sqs}
       local compose=(-f self-host/container/compose.yaml)
+      # The demo runs in a child shell, so its Compose interpolation values do not
+      # propagate here. Supply them before collecting logs from a failed lane.
+      export TPF_REPO_ROOT="$repo_root"
+      export TPF_CSV_RELEASE_VERSION="${TPF_CSV_RELEASE_VERSION:-cleanup}"
       if [[ "$transport" == kafka ]]; then compose+=(-f self-host/container/compose.kafka.yaml); fi
       if (( exit_code != 0 )); then
+        if [[ "$suite" == ha-scale ]]; then
+          # Java prints thread dumps for SIGQUIT; capture both ends of a stalled page.
+          docker compose "${compose[@]}" kill --signal=SIGQUIT worker runtime >&2 || true
+          sleep 2
+        fi
         docker compose "${compose[@]}" ps >&2 || true
         docker compose "${compose[@]}" logs --no-color --tail=500 >&2 || true
+        if [[ "$suite" == ha-scale ]]; then
+          for table in tpf_await_interaction tpf_await_unit tpf_await_admission; do
+            echo "HA scale diagnostic $table:" >&2
+            docker compose "${compose[@]}" exec -T localstack \
+              awslocal dynamodb scan --table-name "$table" --select COUNT --output json >&2 || true
+          done
+          find self-host/container/target/tpf-container-ha/input -maxdepth 3 -type f \
+            -printf 'HA scale file %P %s bytes\n' >&2 || true
+        fi
       fi
       docker compose "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
       return "$exit_code"

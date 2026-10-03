@@ -117,14 +117,16 @@ def create_release(args):
         "pipelineId": args.pipeline_id,
         "contractVersion": contract["contractVersion"],
         "releaseVersion": release_version,
+        "compiledTruthArtifactId": "csv-payments-pipeline-runtime",
         "artifacts": [
             {
                 "artifactId": "csv-payments-pipeline-runtime",
                 "kind": "jar",
-                "uri": str(artifact_path),
+                "uri": artifact_path.as_uri(),
                 "digest": f"sha256:{digest}",
                 "stepIds": [step.get("authoredName") for step in contract.get("steps", [])],
-                "capabilities": ["local-transition-execution", "rest-transition-worker"],
+                "capabilities": sorted(set(contract["capabilities"]["transitionWorkerProtocols"])
+                    | ({"local"} if contract["capabilities"]["localTransitionExecution"] else set())),
             }
         ],
     }
@@ -181,7 +183,8 @@ def pipeline_input_type(release_descriptor_path):
     if not artifacts:
         raise RuntimeError("Release descriptor does not declare a pipeline artifact")
 
-    artifact_path = Path(artifacts[0]["uri"])
+    artifact_uri = urllib.parse.urlparse(artifacts[0]["uri"])
+    artifact_path = Path(urllib.request.url2pathname(artifact_uri.path))
     with zipfile.ZipFile(artifact_path) as jar:
         with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
             contract = json.load(contract_file)
@@ -227,6 +230,7 @@ def submit_csv_input_file(args, input_file, deadline):
         "inputPayload": encoded_payload({
             "filepath": str(path),
             "csvFolderPath": str(folder),
+            "sourceIdentity": hashlib.sha256(path.read_bytes()).hexdigest(),
         }, pipeline_input_transport_type(args.release_descriptor_path)),
         "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
         "outputStreaming": False,

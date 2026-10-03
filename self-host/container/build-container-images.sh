@@ -124,6 +124,7 @@ run_with_retries "CSV pipeline-runtime topology image build" \
   IMAGE_TAG="${IMAGE_TAG}" \
   PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
   PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
+  MAVEN_ARGS="${EXTRA_MAVEN_ARGS[*]}" \
   "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
   "${EXTRA_MAVEN_ARGS[@]}" \
   "${COMMON_BUILD_PROPS[@]}" \
@@ -145,6 +146,7 @@ run_with_retries "CSV coordinator service image build" \
   IMAGE_TAG="${IMAGE_TAG}" \
   PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
   PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
+  MAVEN_ARGS="${EXTRA_MAVEN_ARGS[*]}" \
   "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
   "${EXTRA_MAVEN_ARGS[@]}" \
   -pl orchestrator-svc \
