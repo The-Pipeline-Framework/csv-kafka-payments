@@ -20,6 +20,10 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
+import org.pipelineframework.awaitable.AwaitTelemetry;
+import org.pipelineframework.telemetry.TelemetryPolicy;
+import org.pipelineframework.telemetry.NoopTelemetryRuntime;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,6 +75,8 @@ public class PaymentProviderSqsAwaitMock {
   @Inject
   PaymentProviderConfig paymentProviderConfig;
 
+  private final AwaitTelemetry awaitTelemetry;
+
   private volatile SqsClient client;
   private volatile ExecutorService pollExecutor;
   private volatile ExecutorService processingExecutor;
@@ -79,12 +85,19 @@ public class PaymentProviderSqsAwaitMock {
   private final AtomicInteger consecutivePollFailures = new AtomicInteger();
 
   public PaymentProviderSqsAwaitMock() {
+    this(new AwaitTelemetry(TelemetryPolicy.disabled(), new NoopTelemetryRuntime()));
+  }
+
+  @Inject
+  PaymentProviderSqsAwaitMock(AwaitTelemetry awaitTelemetry) {
+    this.awaitTelemetry = Objects.requireNonNull(awaitTelemetry, "awaitTelemetry must not be null");
   }
 
   PaymentProviderSqsAwaitMock(
       PaymentProviderServiceMock paymentProvider,
       PaymentProviderConfig paymentProviderConfig,
       SqsClient client) {
+    this();
     this.paymentProvider = paymentProvider;
     this.paymentProviderConfig = paymentProviderConfig;
     this.client = client;
@@ -202,6 +215,7 @@ public class PaymentProviderSqsAwaitMock {
       LOG.warnf("Leaving CSV SQS await request with null body for queue redrive id=%s", message.messageId());
       return;
     }
+    awaitTelemetry.recordProviderAdmitted();
     SqsAwaitCompletionEnvelope completion;
     try {
       completion = handle(PipelineJson.mapper().readValue(message.body(), SqsAwaitDispatchEnvelope.class));
@@ -211,6 +225,7 @@ public class PaymentProviderSqsAwaitMock {
     }
     try {
       delayCompletion();
+      awaitTelemetry.recordProviderCompletionDispatched();
       sqsClient(config).sendMessage(SendMessageRequest.builder()
           .queueUrl(config.responseQueueUrl()
               .filter(url -> !url.isBlank())

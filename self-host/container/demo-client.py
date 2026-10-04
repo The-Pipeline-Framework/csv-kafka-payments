@@ -185,7 +185,13 @@ def pipeline_input_type(release_descriptor_path):
     if not artifacts:
         raise RuntimeError("Release descriptor does not declare a pipeline artifact")
 
-    artifact_path = Path(artifacts[0]["uri"])
+    uri = urllib.parse.urlparse(artifacts[0]["uri"])
+    if uri.scheme == "file" and uri.netloc in {"", "localhost"}:
+        artifact_path = Path(urllib.request.url2pathname(uri.path))
+    elif not uri.scheme:
+        artifact_path = Path(artifacts[0]["uri"])
+    else:
+        raise RuntimeError("Pipeline input inspection requires a local artifact path or file URI")
     with zipfile.ZipFile(artifact_path) as jar:
         with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
             contract = json.load(contract_file)
@@ -231,6 +237,7 @@ def submit_csv_input_file(args, input_file, deadline):
         "inputPayload": encoded_payload({
             "filepath": str(path),
             "csvFolderPath": str(folder),
+            "sourceIdentity": hashlib.sha256(path.read_bytes()).hexdigest(),
         }, pipeline_input_transport_type(args.release_descriptor_path)),
         "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
         "outputStreaming": False,

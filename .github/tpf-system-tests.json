@@ -16,6 +16,10 @@
     "native": {
       "command": ["bash", "scripts/system-test-suite.sh", "native"],
       "timeoutMinutes": 360
+    },
+    "observability": {
+      "command": ["bash", "scripts/system-test-suite.sh", "observability"],
+      "timeoutMinutes": 90
     }
   }
 }

@@ -89,8 +89,24 @@ if [[ "${TPF_SKIP_FRAMEWORK_INSTALL}" != "true" ]]; then
 fi
 
 COMMON_BUILD_PROPS=(
+  -Dquarkus.container-image.registry="${IMAGE_REGISTRY}"
+  -Dquarkus.container-image.group="${IMAGE_GROUP}"
+  -Dquarkus.container-image.tag="${IMAGE_TAG}"
   -Dquarkus.devservices.enabled=false
 )
+
+# Observability is an instrumentation build setting, not a different reactor.
+if [[ "${TPF_CSV_OBSERVABILITY:-false}" == "true" ]]; then
+  COMMON_BUILD_PROPS+=(
+    -Dquarkus.otel.enabled=true
+    -Dquarkus.otel.traces.enabled=true
+    -Dquarkus.otel.metrics.enabled=true
+    -Dquarkus.otel.logs.enabled=false
+    -Dquarkus.otel.traces.sampler=always_on
+    -Dquarkus.otel.exporter.otlp.enabled=true
+    -Dquarkus.otel.exporter.otlp.protocol=http/protobuf
+  )
+fi
 
 if [[ ! -r "${TPF_CSV_PIPELINE_CONFIG}" ]]; then
   echo "ERROR: TPF_CSV_PIPELINE_CONFIG must reference a readable pipeline configuration: ${TPF_CSV_PIPELINE_CONFIG}" >&2

@@ -41,6 +41,37 @@ class DemoClientReleaseTest(unittest.TestCase):
             self.assertEqual(release_artifact["capabilities"], ["local", "rest"])
 
 
+class DemoClientArtifactUriTest(unittest.TestCase):
+    def test_submission_includes_stable_source_identity_for_current_canonical_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "payments.csv"
+            source.write_text("id,amount\n1,10\n")
+            args = SimpleNamespace(pipeline_id="pipeline", release_descriptor_path="release.json",
+                                   idempotency_key="key", base_url="http://localhost", tenant_id="tenant",
+                                   control_plane_token="test")
+            with patch.object(demo_client, "pipeline_input_transport_type", return_value=demo_client.V3_CSV_INPUT_FILE_TYPE), \
+                 patch.object(demo_client, "remaining_request_timeout", return_value=30), \
+                 patch.object(demo_client, "require_fixture_time"), \
+                 patch.object(demo_client, "request", return_value={"executionId": "exec"}) as request:
+                demo_client.submit_csv_input_file(args, source, 100)
+            payload = json.loads(request.call_args.kwargs["body"]["inputPayload"]["payload"])
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), payload["sourceIdentity"])
+
+    def test_contract_reads_encoded_file_uri_and_legacy_local_path(self):
+        with tempfile.TemporaryDirectory(prefix="artifact with spaces ") as directory:
+            artifact = Path(directory) / "pipeline runtime.jar"
+            descriptor = Path(directory) / "release.json"
+            contract = {"steps": [{"index": 0, "inputTypeId": "Input"}]}
+            with zipfile.ZipFile(artifact, "w") as jar:
+                jar.writestr("META-INF/pipeline/pipeline-contract.json", json.dumps(contract))
+            for uri in (artifact.as_uri(), str(artifact)):
+                descriptor.write_text(json.dumps({"artifacts": [{"uri": uri}]}))
+                self.assertEqual("Input", demo_client.pipeline_input_type(descriptor))
+            descriptor.write_text(json.dumps({"artifacts": [{"uri": "https://example.test/runtime.jar"}]}))
+            with self.assertRaisesRegex(RuntimeError, "local artifact"):
+                demo_client.pipeline_input_type(descriptor)
+
+
 class DemoClientOutputValidationTest(unittest.TestCase):
 
     def test_generated_output_requires_each_input_id_once(self):

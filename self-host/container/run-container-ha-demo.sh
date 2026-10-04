@@ -145,11 +145,14 @@ for argument in "$@"; do
 done
 
 compose() {
+  local files=(-f "${COMPOSE_FILE}")
   if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
-    docker compose -f "${COMPOSE_FILE}" -f "${COMPOSE_KAFKA_FILE}" "$@"
-    return
+    files+=(-f "${COMPOSE_KAFKA_FILE}")
   fi
-  docker compose -f "${COMPOSE_FILE}" "$@"
+  if [[ "${TPF_CSV_OBSERVABILITY:-false}" == "true" ]]; then
+    files+=(-f "${SCRIPT_DIR}/compose.observability.yaml")
+  fi
+  docker compose "${files[@]}" "$@"
 }
 
 compose_up() {
@@ -191,6 +194,9 @@ cleanup() {
   local exit_code="${1:-0}"
   if [[ "${CI_MODE}" == "true" && "${exit_code}" != "0" && "${TPF_KEEP_STACK_ON_FAILURE:-false}" == "true" ]]; then
     echo "CSV containerized self-host HA stack failed and is being preserved for log collection."
+    return
+  fi
+  if [[ "${TPF_KEEP_STACK:-false}" == "true" ]]; then
     return
   fi
   if [[ "${CI_MODE}" == "true" ]]; then
