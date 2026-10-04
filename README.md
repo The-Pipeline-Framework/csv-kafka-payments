@@ -73,6 +73,26 @@ Run the unit-test reactor:
   -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
+### Why the TPF versions differ
+
+TPF's component repositories publish independently. The BOM identifies a promoted compatible
+set; its version does not mean every component has that version. The published 26.10.1-SNAPSHOT
+BOM still selects 26.9.4 components, while this application needs the newer paged APIs.
+The parent POM therefore selects contracts, compiler and runtime at 26.10.1-SNAPSHOT and keeps
+connectors at their published 26.9.4-SNAPSHOT version.
+
+| Component | Why the application selects it |
+| --- | --- |
+| Contracts | Shared APIs/SPIs used by application code and pulled in transitively by the runtime. Explicit dependency management aligns the whole contracts family, including paged publication, because the imported BOM otherwise overrides those transitive versions. |
+| Compiler | Generates adapters and metadata during the build. The runtime does not supply it. It is a `provided` dependency in `common` and explicitly selected on the annotation-processor path. |
+| Runtime | Executes the generated application adapters. |
+| Connectors | Supply CSV representation and object-ingest boundaries, with their own publication lifecycle. |
+
+Setting a consumer property with the same name as an imported BOM property does not override
+that BOM's dependency versions. The separate properties support exact component pins in
+cross-repository system tests. Once a promoted BOM contains the required compatible set,
+application overrides can be removed in favor of its managed dependency versions.
+
 For other application layouts, see [Runtime layouts](#runtime-layouts). Container and integration
 checks are grouped under [Testing](#testing).
 

@@ -62,7 +62,30 @@
     </modules>
 
     <properties>
-        <pipelineframework.bom.version>26.9.4-SNAPSHOT</pipelineframework.bom.version>
+        <!--
+        ================================================================================
+        WHY TPF HAS MORE THAN ONE VERSION HERE
+
+        TPF component repositories publish independently. The BOM version identifies a
+        promoted compatible set, not one version shared by every component. The published
+        26.10.1-SNAPSHOT BOM still selects 26.9.4 components; this application needs the
+        newer paged-source/publication contracts, compiler and runtime snapshots.
+        Connectors keep their published 26.9.4-SNAPSHOT version.
+
+        Contracts: shared APIs/SPIs, pulled in transitively by the runtime. They are managed
+        explicitly below because an imported BOM overrides transitive versions, and setting
+        a same-named consumer property does not change the imported BOM's properties.
+        Compiler: build-time annotation processing/code generation. The runtime does not
+        supply it; common declares it as provided and the build selects its processor path.
+        Runtime: executes the generated application adapters; it is a runtime dependency.
+
+        The separate properties also let system tests select each immutable component
+        candidate. Remove application overrides when a promoted BOM contains the required
+        compatible set; do not make unrelated component versions match just by number.
+        ================================================================================
+        -->
+        <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
+        <pipelineframework.contracts.version>26.10.1-SNAPSHOT</pipelineframework.contracts.version>
         <pipelineframework.compiler.version>26.10.1-SNAPSHOT</pipelineframework.compiler.version>
         <pipelineframework.runtime.version>26.10.1-SNAPSHOT</pipelineframework.runtime.version>
         <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
@@ -141,6 +164,53 @@
                 <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Imported BOM properties cannot be overridden by consumer properties.
+                 Keep the complete contracts family aligned for paged source/publication APIs. -->
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-api</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-dsl</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>representation-provider-api</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-runtime-api</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-runtime-core</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-runtime-protocol</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-runtime-serialization</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-runtime-spi</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-semantic-model</artifactId>
+                <version>${pipelineframework.contracts.version}</version>
             </dependency>
             <!-- Keep transitive runtime consumers aligned with the declared runtime version. -->
             <dependency>
