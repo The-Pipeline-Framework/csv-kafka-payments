@@ -70,6 +70,7 @@ EOF
         unset TPF_CSV_RECORD_COUNT TPF_CSV_TRANSITION_TRANSPORT_DEADLINE TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS || true
       fi
       export TPF_MAVEN_ARGS="${MAVEN_ARGS:-}"
+      export TPF_SKIP_CONTAINER_BUILD=false
       ./self-host/container/run-container-ha-demo.sh --prepare-images
       export TPF_SKIP_CONTAINER_BUILD=true TPF_KEEP_STACK_ON_FAILURE=true
       ./self-host/container/run-container-ha-demo.sh --ci
