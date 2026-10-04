@@ -73,25 +73,28 @@ Run the unit-test reactor:
   -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-### Why the TPF versions differ
+### TPF dependency versions
 
-TPF's component repositories publish independently. The BOM identifies a promoted compatible
-set; its version does not mean every component has that version. The published 26.10.1-SNAPSHOT
-BOM still selects 26.9.4 components, while this application needs the newer paged APIs.
-The parent POM therefore selects contracts, compiler and runtime at 26.10.1-SNAPSHOT and keeps
-connectors at their published 26.9.4-SNAPSHOT version.
+**The application selects one TPF BOM version.** The BOM owns the compatible component set;
+contracts, compiler, runtime, connectors, plugins and Blocks may have different versions
+inside that set. Application dependencies use the BOM's managed versions rather than
+selecting component versions separately.
 
-| Component | Why the application selects it |
+| Component | How this application consumes it |
 | --- | --- |
-| Contracts | Shared APIs/SPIs used by application code and pulled in transitively by the runtime. Explicit dependency management aligns the whole contracts family, including paged publication, because the imported BOM otherwise overrides those transitive versions. |
-| Compiler | Generates adapters and metadata during the build. The runtime does not supply it. It is a `provided` dependency in `common` and explicitly selected on the annotation-processor path. |
-| Runtime | Executes the generated application adapters. |
-| Connectors | Supply CSV representation and object-ingest boundaries, with their own publication lifecycle. |
+| Runtime | `pipelineframework` is a versionless dependency that executes generated adapters. |
+| Contracts | Normally supplied transitively. `common` explicitly declares the versionless API and runtime SPI artifacts because its authored mappers directly use them. |
+| Compiler | A build-time annotation processor with its version resolved from the BOM. `common` also declares it as `provided` because its protobuf/domain generator goals call compiler entry points directly; it is not packaged as an application runtime dependency. |
+| Connectors and runtime plugins | Versionless dependencies managed by the BOM, including OpenCSV, Object Ingest and persistence. |
 
-Setting a consumer property with the same name as an imported BOM property does not override
-that BOM's dependency versions. The separate properties support exact component pins in
-cross-repository system tests. Once a promoted BOM contains the required compatible set,
-application overrides can be removed in favor of its managed dependency versions.
+The release **Maven build plugin** is a separate build tool. Maven cannot manage build-plugin
+versions through an imported dependency BOM, so `tpf.release.maven-plugin.version` remains
+explicit. It does not override the runtime dependency version. Compatibility tests supply
+one unpublished tested BOM for dependencies and an exact pin for this build plugin.
+
+A new component snapshot does not automatically update a published BOM. The BOM must be
+promoted with the compatible artifacts before an ordinary application build can consume
+new APIs; application overrides should not be used to conceal an outdated BOM.
 
 For other application layouts, see [Runtime layouts](#runtime-layouts). Container and integration
 checks are grouped under [Testing](#testing).

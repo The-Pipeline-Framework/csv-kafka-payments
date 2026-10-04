@@ -131,7 +131,6 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>persistence-plugin</artifactId>
-            <version>${pipelineframework.runtime.version}</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

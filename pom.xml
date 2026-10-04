@@ -64,31 +64,25 @@
     <properties>
         <!--
         ================================================================================
-        WHY TPF HAS MORE THAN ONE VERSION HERE
+        TPF DEPENDENCY VERSIONS: SELECT ONE BOM
 
-        TPF component repositories publish independently. The BOM version identifies a
-        promoted compatible set, not one version shared by every component. The published
-        26.10.1-SNAPSHOT BOM still selects 26.9.4 components; this application needs the
-        newer paged-source/publication contracts, compiler and runtime snapshots.
-        Connectors keep their published 26.9.4-SNAPSHOT version.
+        The BOM owns the compatible contracts, compiler, runtime, connector, plugin and
+        Block versions. Component repositories may publish different versions; applications
+        select the tested set with this one BOM version, not component overrides.
+        Runtime/connector/plugin dependencies and the compiler's annotation-processor path
+        use BOM-managed versions. Contracts arrive transitively; declare a versionless
+        contract dependency only when application code directly uses its APIs.
+        The compiler is a build tool, not supplied by the runtime. common also needs it
+        as provided for its explicit protobuf/domain generator goals.
 
-        Contracts: shared APIs/SPIs, pulled in transitively by the runtime. They are managed
-        explicitly below because an imported BOM overrides transitive versions, and setting
-        a same-named consumer property does not change the imported BOM's properties.
-        Compiler: build-time annotation processing/code generation. The runtime does not
-        supply it; common declares it as provided and the build selects its processor path.
-        Runtime: executes the generated application adapters; it is a runtime dependency.
-
-        The separate properties also let system tests select each immutable component
-        candidate. Remove application overrides when a promoted BOM contains the required
-        compatible set; do not make unrelated component versions match just by number.
+        Maven build plugins are the exception: imported dependency management cannot set
+        their versions. The separately named release Maven plugin property below selects
+        that build tool only; it does not override runtime dependencies or the BOM.
+        Compatibility tests inject a tested BOM plus that explicit build-plugin pin.
         ================================================================================
         -->
         <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
-        <pipelineframework.contracts.version>26.10.1-SNAPSHOT</pipelineframework.contracts.version>
-        <pipelineframework.compiler.version>26.10.1-SNAPSHOT</pipelineframework.compiler.version>
-        <pipelineframework.runtime.version>26.10.1-SNAPSHOT</pipelineframework.runtime.version>
-        <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
+        <tpf.release.maven-plugin.version>26.10.1-SNAPSHOT</tpf.release.maven-plugin.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>
         <tpf.release.input-csv-file-processing-svc.uri>file:///local-modular-release/input-csv-file-processing-svc.zip</tpf.release.input-csv-file-processing-svc.uri>
@@ -164,59 +158,6 @@
                 <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
-            <!-- Imported BOM properties cannot be overridden by consumer properties.
-                 Keep the complete contracts family aligned for paged source/publication APIs. -->
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-api</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-dsl</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>representation-provider-api</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-runtime-api</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-runtime-core</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-runtime-protocol</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-runtime-serialization</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-runtime-spi</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework-semantic-model</artifactId>
-                <version>${pipelineframework.contracts.version}</version>
-            </dependency>
-            <!-- Keep transitive runtime consumers aligned with the declared runtime version. -->
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework</artifactId>
-                <version>${pipelineframework.runtime.version}</version>
             </dependency>
             <!-- Pipeline Framework BOM -->
             <dependency>
@@ -450,6 +391,7 @@
                         <release>21</release>
                         <enablePreview>true</enablePreview>
                         <useIncrementalCompilation>false</useIncrementalCompilation>
+                        <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
@@ -470,12 +412,10 @@
                             <path>
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>pipelineframework-compiler</artifactId>
-                                <version>${pipelineframework.compiler.version}</version>
                             </path>
                             <path>
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>representation-provider-opencsv</artifactId>
-                                <version>${pipelineframework.connectors.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

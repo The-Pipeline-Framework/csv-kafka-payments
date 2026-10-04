@@ -44,13 +44,11 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>representation-provider-opencsv</artifactId>
-            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <!-- Plugin module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>persistence-plugin</artifactId>
-            <version>${pipelineframework.runtime.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>io.quarkus</groupId>
