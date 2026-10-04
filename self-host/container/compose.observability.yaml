@@ -3,8 +3,8 @@ services:
   lgtm:
     image: docker.io/grafana/otel-lgtm:0.24.0
     ports:
-      - "${TPF_TEMPO_PORT:-3200}:3200"
-      - "${TPF_PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${TPF_TEMPO_PORT:-3200}:3200"
+      - "127.0.0.1:${TPF_PROMETHEUS_PORT:-9090}:9090"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3200/ready"]
       interval: 5s

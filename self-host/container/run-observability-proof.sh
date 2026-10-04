@@ -3,7 +3,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo_root"
 export TPF_CSV_OBSERVABILITY=true
-export TPF_CSV_OTEL_ENABLED=true TPF_CSV_OTEL_SDK_DISABLED=false
+export TPF_CSV_OTEL_ENABLED=true TPF_CSV_OTEL_SDK_DISABLED=false TPF_CSV_WORKER_OTEL_SDK_DISABLED=false
 export TPF_CSV_OTEL_OPTIONS='-Dpipeline.telemetry.enabled=true -Dpipeline.telemetry.metrics.enabled=true -Dpipeline.telemetry.tracing.enabled=true -Dquarkus.otel.exporter.otlp.endpoint=http://lgtm:4318 -Dquarkus.otel.exporter.otlp.protocol=http/protobuf -Dquarkus.otel.metric.export.interval=1s -Dquarkus.otel.traces.sampler=always_on'
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-csv-telemetry-proof}"
 export IMAGE_TAG="${IMAGE_TAG:-observability-proof}"
@@ -58,7 +58,7 @@ for transport in sqs kafka; do
     fi
     echo 'Verified that successful coordinator/runtime export cannot mask a disabled worker SDK.'
     docker compose "${compose_files[@]}" down -v --remove-orphans
-    unset TPF_CSV_WORKER_OTEL_SDK_DISABLED
+    export TPF_CSV_WORKER_OTEL_SDK_DISABLED=false
   fi
 
 done

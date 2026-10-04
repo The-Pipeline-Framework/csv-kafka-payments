@@ -225,7 +225,6 @@ public class PaymentProviderSqsAwaitMock {
     }
     try {
       delayCompletion();
-      awaitTelemetry.recordProviderCompletionDispatched();
       sqsClient(config).sendMessage(SendMessageRequest.builder()
           .queueUrl(config.responseQueueUrl()
               .filter(url -> !url.isBlank())
@@ -233,6 +232,7 @@ public class PaymentProviderSqsAwaitMock {
                   "csv-payments.payment-provider.sqs.response-queue-url must be configured when SQS provider is enabled.")))
           .messageBody(serialize(completion))
           .build());
+      awaitTelemetry.recordProviderCompletionDispatched();
       deleteMessage(requestQueueUrl, message.receiptHandle(), config);
     } catch (RuntimeException e) {
       LOG.errorf(e, "Failed sending CSV SQS await completion id=%s", message.messageId());
