@@ -344,6 +344,12 @@ PY
 
 if [[ "${CI_MODE}" == "true" ]]; then
   compose down -v --remove-orphans >/dev/null 2>&1 || true
+  # The object target container creates staged page directories as root in the
+  # bind-mounted input directory. Reclaim only those generated files before
+  # resetting the run directory for the next profile.
+  if [[ -d "${TPF_INPUT_DIR}/.tpf-pages" ]]; then
+    sudo chown -R "$(id -u):$(id -g)" "${TPF_INPUT_DIR}/.tpf-pages"
+  fi
   rm -rf "${TPF_RUN_DIR}"
 fi
 
