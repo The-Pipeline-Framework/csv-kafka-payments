@@ -89,11 +89,28 @@ class DemoClientOutputValidationTest(unittest.TestCase):
                 pipeline_id="csv-payments", base_url="http://coordinator:8082",
                 tenant_id="tenant-1", control_plane_token="token",
                 release_descriptor_path="release.json", idempotency_key="fixed-key")
-            with patch.object(demo_client, "pipeline_input_transport_type", return_value="input"), \
+            with patch.object(demo_client, "pipeline_input_transport_type", return_value=demo_client.V3_CSV_INPUT_FILE_TYPE), \
                     patch.object(demo_client, "request", return_value={"executionId": "exec-1"}) as request:
                 demo_client.submit_csv_input_file(args, source, demo_client.time.time() + 30)
             payload = request.call_args.kwargs["body"]["inputPayload"]["payload"]
             self.assertIn(hashlib.sha256(source.read_bytes()).hexdigest(), payload)
+
+    def test_paged_submission_uses_one_snapshot_for_identity_and_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "payments.csv"
+            content = b"'CSV ID'\n'1'\n"
+            source.write_bytes(content)
+            args = SimpleNamespace(
+                pipeline_id="csv-payments", base_url="http://coordinator:8082",
+                tenant_id="tenant-1", control_plane_token="token",
+                release_descriptor_path="release.json", idempotency_key=None)
+            with patch.object(demo_client, "pipeline_input_transport_type", return_value=demo_client.V3_CSV_INPUT_FILE_TYPE), \
+                    patch.object(demo_client, "request", return_value={"executionId": "exec-1"}) as request:
+                demo_client.submit_csv_input_file(args, source, demo_client.time.time() + 30)
+            body = request.call_args.kwargs["body"]
+            self.assertEqual(hashlib.sha256(content).hexdigest(),
+                             json.loads(body["inputPayload"]["payload"])["sourceIdentity"])
+            self.assertEqual(demo_client.default_idempotency_key(args, source, content), body["idempotencyKey"])
 
     def test_generated_output_requires_each_input_id_once(self):
         with tempfile.TemporaryDirectory() as directory:

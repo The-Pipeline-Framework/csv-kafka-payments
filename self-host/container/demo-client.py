@@ -213,10 +213,9 @@ def pipeline_input_transport_type(release_descriptor_path):
     raise RuntimeError(f"Unsupported CSV Payments input contract type: {input_type}")
 
 
-def default_idempotency_key(args, input_file):
+def default_idempotency_key(args, input_file, content):
     """Build a stable key for safe command retries; callers may override it explicitly."""
     path = Path(input_file).resolve()
-    content = path.read_bytes()
     parts = [
         args.pipeline_id,
         str(path),
@@ -230,18 +229,15 @@ def submit_csv_input_file(args, input_file, deadline):
     path = Path(input_file).resolve()
     folder = path.parent
     input_type = pipeline_input_transport_type(args.release_descriptor_path)
+    content = path.read_bytes()
     payload = {"filepath": str(path), "csvFolderPath": str(folder)}
     if input_type == V3_CSV_INPUT_FILE_TYPE:
-        payload["sourceIdentity"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        payload["sourceIdentity"] = hashlib.sha256(content).hexdigest()
     body = {
         "pipelineId": args.pipeline_id,
         "inputShape": "UNI",
-        "inputPayload": encoded_payload({
-            "filepath": str(path),
-            "csvFolderPath": str(folder),
-            "sourceIdentity": hashlib.sha256(path.read_bytes()).hexdigest(),
-        }, pipeline_input_transport_type(args.release_descriptor_path)),
-        "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
+        "inputPayload": encoded_payload(payload, input_type),
+        "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path, content),
         "outputStreaming": False,
     }
     accepted = request(

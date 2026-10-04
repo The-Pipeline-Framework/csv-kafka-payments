@@ -1349,6 +1349,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
                 "PIPELINE_ITEM_REJECT_PROVIDER", "memory"), false);
 
+        waitForPipelineComplete(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS, runResult.output());
         assertTrue(outputRecordCountReady(MALFORMED_REJECT_EXPECTED_OUTPUT_RECORDS),
             "The valid source should complete despite the malformed source failure.");
 

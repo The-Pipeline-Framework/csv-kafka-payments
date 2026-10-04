@@ -13,6 +13,9 @@ fi
 if [[ " ${EXTRA_MAVEN_ARGS[*]-} " != *" -Dmaven.repo.local="* ]]; then
   EXTRA_MAVEN_ARGS+=(-Dmaven.repo.local="${REPO_ROOT}/.m2/repository")
 fi
+MAVEN_ARGS_FILE="$(mktemp)"
+trap 'rm -f "${MAVEN_ARGS_FILE}"' EXIT
+printf '%s\0' "${EXTRA_MAVEN_ARGS[@]}" > "${MAVEN_ARGS_FILE}"
 
 if [[ ! -x "${MVN_BIN}" ]]; then
   echo "ERROR: Maven wrapper not found or not executable at ${MVN_BIN}" >&2
@@ -124,7 +127,7 @@ run_with_retries "CSV pipeline-runtime topology image build" \
   IMAGE_TAG="${IMAGE_TAG}" \
   PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
   PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
-  MAVEN_ARGS="${EXTRA_MAVEN_ARGS[*]}" \
+  TPF_MAVEN_ARGS_FILE="${MAVEN_ARGS_FILE}" \
   "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
   "${EXTRA_MAVEN_ARGS[@]}" \
   "${COMMON_BUILD_PROPS[@]}" \
@@ -146,7 +149,7 @@ run_with_retries "CSV coordinator service image build" \
   IMAGE_TAG="${IMAGE_TAG}" \
   PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT}" \
   PIPELINE_CONFIG="${TPF_CSV_PIPELINE_CONFIG}" \
-  MAVEN_ARGS="${EXTRA_MAVEN_ARGS[*]}" \
+  TPF_MAVEN_ARGS_FILE="${MAVEN_ARGS_FILE}" \
   "${EXAMPLE_DIR}/build-pipeline-runtime.sh" \
   "${EXTRA_MAVEN_ARGS[@]}" \
   -pl orchestrator-svc \

@@ -66,9 +66,10 @@ class CsvPaymentOutputPublishMapperTest {
         ObjectPublishGroupRenderer<PaymentOutput> unpaged = mapper.openGroup("payments.csv", first);
         String expected = new String(unpaged.onItem(first).bytes(), StandardCharsets.UTF_8)
             + new String(unpaged.onItem(second).bytes(), StandardCharsets.UTF_8);
+        ObjectPublishGroupRenderer<PaymentOutput> page = mapper.openPageGroup("payments.csv", first);
         String composed = new String(mapper.groupPrefix("payments.csv").bytes(), StandardCharsets.UTF_8)
-            + new String(mapper.openPageGroup("payments.csv", first).onItem(first).bytes(), StandardCharsets.UTF_8)
-            + new String(mapper.openPageGroup("payments.csv", second).onItem(second).bytes(), StandardCharsets.UTF_8);
+            + new String(page.onItem(first).bytes(), StandardCharsets.UTF_8)
+            + new String(page.onItem(second).bytes(), StandardCharsets.UTF_8);
 
         assertEquals(expected, composed);
         assertEquals(1, occurrences(composed, "AMOUNT"));
