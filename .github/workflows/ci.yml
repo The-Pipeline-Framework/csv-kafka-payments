@@ -32,6 +32,9 @@ jobs:
           cache: maven
           cache-path: ${{ github.workspace }}/.m2/repository
 
+      - name: Check observability proof launcher
+        run: python3 -m unittest discover -s self-host/container -p test_observability_runner.py
+
       - name: Compile and run unit tests
         run: ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
 
