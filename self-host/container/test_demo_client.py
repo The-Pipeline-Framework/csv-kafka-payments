@@ -53,6 +53,32 @@ class DemoClientReleaseTest(unittest.TestCase):
                         demo_client.pipeline_input_type(output)
 
 
+class DemoClientSubmissionTest(unittest.TestCase):
+
+    def test_submission_supplies_content_identity_for_canonical_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payments.csv"
+            args = SimpleNamespace(pipeline_id="csv", release_descriptor_path="release.json",
+                                   idempotency_key="fixture", base_url="http://coordinator",
+                                   tenant_id="tenant", control_plane_token="fixture-token")
+            for input_type in [demo_client.V3_CSV_INPUT_FILE_TYPE,
+                               demo_client.V2_CSV_INPUT_FILE_TRANSPORT_TYPE]:
+                for content in [b"first snapshot", b"changed snapshot"]:
+                    with self.subTest(input_type=input_type, content=content):
+                        path.write_bytes(content)
+                        with patch.object(demo_client, "pipeline_input_transport_type", return_value=input_type), \
+                                patch.object(demo_client, "request", return_value={"executionId": "exec-1"}) as request:
+                            demo_client.submit_csv_input_file(args, path, demo_client.time.time() + 30)
+                        envelope = request.call_args.kwargs["body"]["inputPayload"]
+                        payload = json.loads(envelope["payload"])
+                        self.assertEqual(envelope["payloadTypeId"], input_type)
+                        self.assertEqual(payload["filepath"], str(path.resolve()))
+                        if input_type == demo_client.V3_CSV_INPUT_FILE_TYPE:
+                            self.assertEqual(payload["sourceIdentity"], hashlib.sha256(content).hexdigest())
+                        else:
+                            self.assertNotIn("sourceIdentity", payload)
+
+
 class DemoClientOutputValidationTest(unittest.TestCase):
 
     def test_generated_output_requires_each_input_id_once(self):
