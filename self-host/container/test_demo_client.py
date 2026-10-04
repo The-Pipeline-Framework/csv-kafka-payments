@@ -23,7 +23,8 @@ class DemoClientReleaseTest(unittest.TestCase):
             artifact = Path(directory) / "pipeline runtime.jar"
             output = Path(directory) / "pipeline-release.json"
             contract = {"pipelineId": "org.pipelineframework.csv", "contractVersion": "contract-1",
-                        "steps": [{"authoredName": "ProcessCsvPaymentsInput"}],
+                        "steps": [{"authoredName": "ProcessCsvPaymentsInput", "index": 0,
+                                   "inputTypeId": demo_client.V3_CSV_INPUT_FILE_TYPE}],
                         "capabilities": {"localTransitionExecution": True,
                                          "transitionWorkerProtocols": ["local", "rest"]}}
             with zipfile.ZipFile(artifact, "w") as archive:
@@ -39,6 +40,43 @@ class DemoClientReleaseTest(unittest.TestCase):
             self.assertEqual(release_artifact["digest"], "sha256:" + hashlib.sha256(artifact.read_bytes()).hexdigest())
             self.assertEqual(release_artifact["stepIds"], ["ProcessCsvPaymentsInput"])
             self.assertEqual(release_artifact["capabilities"], ["local", "rest"])
+            self.assertEqual(demo_client.pipeline_input_type(output), demo_client.V3_CSV_INPUT_FILE_TYPE)
+
+    def test_pipeline_input_rejects_nonlocal_artifact_uris(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "pipeline-release.json"
+            for uri in ["https://example.com/runtime.jar", "file://remote/runtime.jar",
+                        "file:///runtime.jar?query", "file:///runtime.jar#fragment"]:
+                with self.subTest(uri=uri):
+                    output.write_text(json.dumps({"artifacts": [{"uri": uri}]}))
+                    with self.assertRaisesRegex(RuntimeError, "local file:"):
+                        demo_client.pipeline_input_type(output)
+
+
+class DemoClientSubmissionTest(unittest.TestCase):
+
+    def test_submission_supplies_content_identity_for_canonical_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payments.csv"
+            args = SimpleNamespace(pipeline_id="csv", release_descriptor_path="release.json",
+                                   idempotency_key="fixture", base_url="http://coordinator",
+                                   tenant_id="tenant", control_plane_token="fixture-token")
+            for input_type in [demo_client.V3_CSV_INPUT_FILE_TYPE,
+                               demo_client.V2_CSV_INPUT_FILE_TRANSPORT_TYPE]:
+                for content in [b"first snapshot", b"changed snapshot"]:
+                    with self.subTest(input_type=input_type, content=content):
+                        path.write_bytes(content)
+                        with patch.object(demo_client, "pipeline_input_transport_type", return_value=input_type), \
+                                patch.object(demo_client, "request", return_value={"executionId": "exec-1"}) as request:
+                            demo_client.submit_csv_input_file(args, path, demo_client.time.time() + 30)
+                        envelope = request.call_args.kwargs["body"]["inputPayload"]
+                        payload = json.loads(envelope["payload"])
+                        self.assertEqual(envelope["payloadTypeId"], input_type)
+                        self.assertEqual(payload["filepath"], str(path.resolve()))
+                        if input_type == demo_client.V3_CSV_INPUT_FILE_TYPE:
+                            self.assertEqual(payload["sourceIdentity"], hashlib.sha256(content).hexdigest())
+                        else:
+                            self.assertNotIn("sourceIdentity", payload)
 
 
 class DemoClientOutputValidationTest(unittest.TestCase):
