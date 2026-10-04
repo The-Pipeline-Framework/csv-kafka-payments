@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-suite=${1:?usage: system-test-suite.sh smoke|ha|ha-scale|native}
+suite=${1:?usage: system-test-suite.sh smoke|ha|ha-scale|observability|native}
 read -r -a maven_args <<< "${MAVEN_ARGS:-}" || true
 cd "$repo_root"
 
@@ -86,6 +86,9 @@ EOF
         run_profile "$transport" "$profile"
       done
     done
+    ;;
+  observability)
+    ./self-host/container/run-observability-proof.sh
     ;;
   native)
     ./mvnw -B clean install -Pnative -Dquarkus.container-image.build=false --no-transfer-progress "${maven_args[@]}"

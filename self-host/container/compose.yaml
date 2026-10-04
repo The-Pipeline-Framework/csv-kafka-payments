@@ -54,8 +54,10 @@ services:
         -Dquarkus.grpc.server.use-separate-server=false
         -Dquarkus.grpc.server.plain-text=true
         -Dquarkus.hibernate-orm.schema-management.strategy=drop-and-create
-        -Dquarkus.otel.enabled=false
-        -Dquarkus.otel.sdk.disabled=true
+        -Dquarkus.otel.resource.attributes=service.name=csv-persistence
+        ${TPF_CSV_OTEL_OPTIONS:-}
+        -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
+        -Dquarkus.otel.sdk.disabled=${TPF_CSV_OTEL_SDK_DISABLED:-true}
         -Dquarkus.micrometer.export.prometheus.enabled=false
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
@@ -92,8 +94,10 @@ services:
         -Dquarkus.grpc.server.use-separate-server=false
         -Dquarkus.grpc.server.plain-text=true
         -Dpipeline.client.tls-configuration-name=
-        -Dquarkus.otel.enabled=false
-        -Dquarkus.otel.sdk.disabled=true
+        -Dquarkus.otel.resource.attributes=service.name=csv-runtime
+        ${TPF_CSV_OTEL_OPTIONS:-}
+        -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
+        -Dquarkus.otel.sdk.disabled=${TPF_CSV_OTEL_SDK_DISABLED:-true}
         -Dquarkus.micrometer.export.prometheus.enabled=false
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
@@ -175,8 +179,10 @@ services:
         -Dquarkus.grpc.server.use-separate-server=false
         -Dquarkus.grpc.server.plain-text=true
         -Dpipeline.client.tls-configuration-name=
-        -Dquarkus.otel.enabled=false
-        -Dquarkus.otel.sdk.disabled=true
+        -Dquarkus.otel.resource.attributes=service.name=csv-worker
+        ${TPF_CSV_OTEL_OPTIONS:-}
+        -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
+        -Dquarkus.otel.sdk.disabled=${TPF_CSV_WORKER_OTEL_SDK_DISABLED:-${TPF_CSV_OTEL_SDK_DISABLED:-true}}
         -Dquarkus.micrometer.export.prometheus.enabled=false
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
@@ -290,8 +296,10 @@ services:
         -Dquarkus.grpc.server.use-separate-server=false
         -Dquarkus.grpc.server.plain-text=true
         -Dpipeline.client.tls-configuration-name=
-        -Dquarkus.otel.enabled=false
-        -Dquarkus.otel.sdk.disabled=true
+        -Dquarkus.otel.resource.attributes=service.name=csv-coordinator
+        ${TPF_CSV_OTEL_OPTIONS:-}
+        -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
+        -Dquarkus.otel.sdk.disabled=${TPF_CSV_OTEL_SDK_DISABLED:-true}
         -Dquarkus.micrometer.export.prometheus.enabled=false
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false

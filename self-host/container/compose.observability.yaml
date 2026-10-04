@@ -1,0 +1,28 @@
+# Opt-in instrumentation proof; the ordinary HA stack keeps its existing defaults.
+services:
+  lgtm:
+    image: docker.io/grafana/otel-lgtm:0.24.0
+    ports:
+      - "127.0.0.1:${TPF_TEMPO_PORT:-3200}:3200"
+      - "127.0.0.1:${TPF_PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3200/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+  coordinator:
+    depends_on:
+      lgtm:
+        condition: service_healthy
+  worker:
+    depends_on:
+      lgtm:
+        condition: service_healthy
+  runtime:
+    depends_on:
+      lgtm:
+        condition: service_healthy
+  persistence:
+    depends_on:
+      lgtm:
+        condition: service_healthy
