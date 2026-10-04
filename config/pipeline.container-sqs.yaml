@@ -148,7 +148,9 @@ types:
 steps:
   - name: Process Csv Payments Input
     service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
-    cardinality: EXPANSION
+    cardinality: ONE_TO_MANY
+    paging:
+      maxRecords: 1000
     input: CsvPaymentsInputFile
     output: PaymentStatus
     java:

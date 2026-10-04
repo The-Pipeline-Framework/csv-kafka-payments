@@ -98,6 +98,7 @@ services:
         -Dquarkus.micrometer.binder.http-server.enabled=false
         -Dquarkus.micrometer.binder.http-client.enabled=false
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
+        -Dpipeline.orchestrator.release-version=${TPF_CSV_RELEASE_VERSION:?TPF_CSV_RELEASE_VERSION must be set}
         -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
         -Dpipeline.orchestrator.strict-startup=false

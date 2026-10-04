@@ -58,6 +58,24 @@ class CsvPaymentOutputPublishMapperTest {
     }
 
     @Test
+    void pagedRowsComposeToTheSameCsvAsOneUnpagedGroup() {
+        CsvPaymentOutputPublishMapper mapper = new CsvPaymentOutputPublishMapper();
+        PaymentOutput first = paymentOutput(tempDir.resolve("payments.csv"), "csv-1", "Alice", "100.00");
+        PaymentOutput second = paymentOutput(tempDir.resolve("payments.csv"), "csv-2", "Bob", "200.00");
+
+        ObjectPublishGroupRenderer<PaymentOutput> unpaged = mapper.openGroup("payments.csv", first);
+        String expected = new String(unpaged.onItem(first).bytes(), StandardCharsets.UTF_8)
+            + new String(unpaged.onItem(second).bytes(), StandardCharsets.UTF_8);
+        ObjectPublishGroupRenderer<PaymentOutput> page = mapper.openPageGroup("payments.csv", first);
+        String composed = new String(mapper.groupPrefix("payments.csv").bytes(), StandardCharsets.UTF_8)
+            + new String(page.onItem(first).bytes(), StandardCharsets.UTF_8)
+            + new String(page.onItem(second).bytes(), StandardCharsets.UTF_8);
+
+        assertEquals(expected, composed);
+        assertEquals(1, occurrences(composed, "AMOUNT"));
+    }
+
+    @Test
     void neutralizesSpreadsheetFormulaPrefixesInStringCells() {
         CsvPaymentOutputPublishMapper mapper = new CsvPaymentOutputPublishMapper();
         PaymentOutput output = new PaymentOutput(

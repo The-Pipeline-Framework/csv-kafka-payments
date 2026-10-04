@@ -18,10 +18,11 @@ import org.pipelineframework.objectpublish.PagedStreamingObjectPublishMapper;
  */
 public final class CsvPaymentOutputPublishMapper
     implements PagedStreamingObjectPublishMapper<org.pipelineframework.csv.domain.PaymentOutput> {
+    private static final String CSV_HEADER = "'AMOUNT','CSV ID','CURRENCY','FEE','MESSAGE','RECIPIENT','REFERENCE','STATUS'\n";
 
     @Override
     public ObjectPayloadChunk groupPrefix(String groupKey) {
-        return ObjectPayloadChunk.EMPTY;
+        return new ObjectPayloadChunk(CSV_HEADER.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override
@@ -58,7 +59,13 @@ public final class CsvPaymentOutputPublishMapper
     @Override
     public ObjectPublishGroupRenderer<org.pipelineframework.csv.domain.PaymentOutput> openGroup(
         String groupKey, org.pipelineframework.csv.domain.PaymentOutput firstItem) {
-        return new CsvPaymentOutputGroupRenderer(groupKey);
+        return new CsvPaymentOutputGroupRenderer(groupKey, false);
+    }
+
+    @Override
+    public ObjectPublishGroupRenderer<org.pipelineframework.csv.domain.PaymentOutput> openPageGroup(
+        String groupKey, org.pipelineframework.csv.domain.PaymentOutput firstItem) {
+        return new CsvPaymentOutputGroupRenderer(groupKey, true);
     }
 
     private static final class CsvPaymentOutputGroupRenderer
@@ -67,10 +74,13 @@ public final class CsvPaymentOutputPublishMapper
         private final String groupKey;
         private final StringWriter writer = new StringWriter();
         private final StatefulBeanToCsv<org.pipelineframework.csv.common.domain.PaymentOutput> csv;
+        private final boolean pageBody;
+        private boolean firstItem = true;
         private long recordCount;
 
-        private CsvPaymentOutputGroupRenderer(String groupKey) {
+        private CsvPaymentOutputGroupRenderer(String groupKey, boolean pageBody) {
             this.groupKey = groupKey;
+            this.pageBody = pageBody;
             this.csv = new StatefulBeanToCsvBuilder<org.pipelineframework.csv.common.domain.PaymentOutput>(writer)
                 .withQuotechar('\'')
                 .withSeparator(CSVWriter.DEFAULT_SEPARATOR)
@@ -89,7 +99,17 @@ public final class CsvPaymentOutputPublishMapper
                 sanitizeFormulaCells(output);
                 csv.write(output);
                 recordCount++;
-                return drain();
+                ObjectPayloadChunk chunk = drain();
+                if (!pageBody || !firstItem) {
+                    firstItem = false;
+                    return chunk;
+                }
+                firstItem = false;
+                String rendered = new String(chunk.bytes(), StandardCharsets.UTF_8);
+                if (!rendered.startsWith(CSV_HEADER)) {
+                    throw new IllegalStateException("OpenCSV output header differs from the paged group prefix");
+                }
+                return new ObjectPayloadChunk(rendered.substring(CSV_HEADER.length()).getBytes(StandardCharsets.UTF_8));
             } catch (Exception e) {
                 throw new IllegalStateException("Failed rendering CSV payment output object for group: " + groupKey, e);
             }
