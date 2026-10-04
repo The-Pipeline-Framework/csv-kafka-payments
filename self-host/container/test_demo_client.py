@@ -23,7 +23,8 @@ class DemoClientReleaseTest(unittest.TestCase):
             artifact = Path(directory) / "pipeline runtime.jar"
             output = Path(directory) / "pipeline-release.json"
             contract = {"pipelineId": "org.pipelineframework.csv", "contractVersion": "contract-1",
-                        "steps": [{"authoredName": "ProcessCsvPaymentsInput"}],
+                        "steps": [{"authoredName": "ProcessCsvPaymentsInput", "index": 0,
+                                   "inputTypeId": demo_client.V3_CSV_INPUT_FILE_TYPE}],
                         "capabilities": {"localTransitionExecution": True,
                                          "transitionWorkerProtocols": ["local", "rest"]}}
             with zipfile.ZipFile(artifact, "w") as archive:
@@ -39,6 +40,17 @@ class DemoClientReleaseTest(unittest.TestCase):
             self.assertEqual(release_artifact["digest"], "sha256:" + hashlib.sha256(artifact.read_bytes()).hexdigest())
             self.assertEqual(release_artifact["stepIds"], ["ProcessCsvPaymentsInput"])
             self.assertEqual(release_artifact["capabilities"], ["local", "rest"])
+            self.assertEqual(demo_client.pipeline_input_type(output), demo_client.V3_CSV_INPUT_FILE_TYPE)
+
+    def test_pipeline_input_rejects_nonlocal_artifact_uris(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "pipeline-release.json"
+            for uri in ["https://example.com/runtime.jar", "file://remote/runtime.jar",
+                        "file:///runtime.jar?query", "file:///runtime.jar#fragment"]:
+                with self.subTest(uri=uri):
+                    output.write_text(json.dumps({"artifacts": [{"uri": uri}]}))
+                    with self.assertRaisesRegex(RuntimeError, "local file:"):
+                        demo_client.pipeline_input_type(output)
 
 
 class DemoClientOutputValidationTest(unittest.TestCase):

@@ -185,7 +185,11 @@ def pipeline_input_type(release_descriptor_path):
     if not artifacts:
         raise RuntimeError("Release descriptor does not declare a pipeline artifact")
 
-    artifact_path = Path(artifacts[0]["uri"])
+    artifact_uri = urllib.parse.urlsplit(artifacts[0]["uri"])
+    if (artifact_uri.scheme != "file" or artifact_uri.netloc not in {"", "localhost"}
+            or artifact_uri.query or artifact_uri.fragment):
+        raise RuntimeError("HA fixture requires a local file: artifact URI")
+    artifact_path = Path(urllib.request.url2pathname(artifact_uri.path))
     with zipfile.ZipFile(artifact_path) as jar:
         with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
             contract = json.load(contract_file)
