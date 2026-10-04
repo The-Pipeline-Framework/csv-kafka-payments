@@ -902,6 +902,40 @@ The ZIP is attached with classifier `application`. `--deploy` runs standard Mave
 keeping the monolith mapping active. Descriptor generation stays in `verify`, before publication; Maven selects no
 Cloud target. Preserve the descriptor unchanged alongside the exact published ZIP. The CLI verifies or deploys it
 using external resolver and deployment configuration.
-This descriptor describes the monolith; the split-service layouts require their own complete multi-artefact descriptor.
+The monolith and modular layouts have separate descriptors. The pipeline-runtime layout still needs its own grouped-runtime closure.
 See [Release production](https://pipelineframework.org/deploy/release-descriptors) and
 [CLI deployment](https://pipelineframework.org/deploy/deployment-cli).
+
+
+## Produce a modular Release
+
+The modular Release contains five complete fast-JAR ZIPs: input processing, payment status, the external payment-provider
+simulator, persistence, and the orchestrator. Input processing owns `ProcessCsvPaymentsInput`; payment status owns the
+approved, unapproved, and final-output steps. The orchestrator carries the complete compiled metadata. The provider
+and persistence hosts are included even though they own no authored Pipeline steps. Kafka and PostgreSQL remain
+external deployment prerequisites.
+
+Build the modular packages once with the existing modular build command. Then produce the Release using the existing
+outputs, without repeating compilation or packaging:
+
+```sh
+./build-modular-telemetry-images.sh
+./mvnw -B -pl orchestrator-svc \
+  org.pipelineframework:pipelineframework-release-maven-plugin:generate-release-descriptor@produce-modular-release \
+  org.codehaus.mojo:build-helper-maven-plugin:attach-artifact@attach-modular-release-archives \
+  -Dtpf.release.skip=false -Dtpf.release.version=local-modular-1 -Dtpf.release.allowLocalUris=true \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+python3 scripts/check-release-artifacts.py orchestrator-svc
+tpf release verify --release orchestrator-svc/target/pipeline-release.json
+```
+
+Preserve `orchestrator-svc/target/pipeline-release.json` and every ZIP under
+`orchestrator-svc/target/pipeline-release-artifacts/`. Each archive is attached to the orchestrator Maven artefact with
+its host name as classifier. For standard Maven publication, use a non-SNAPSHOT reactor version and configure all five
+`tpf.release.<host-name>.uri` properties to immutable Maven locations, such as
+`maven:org.pipelineframework.csv:orchestrator-svc:zip:input-csv-file-processing-svc:1.0.0`. Keep the modular mapping active
+and run standard Maven `deploy` with `-Dtpf.release.skip=false -Dtpf.release.version=1.0.0 -Dmaven.deploy.skip=false` and
+the repository-local Maven cache. The producer is bound to `verify`; Maven does not select a deployment target.
+
+CI produces and verifies this complete Release after both existing modular E2E builds: provider rejection and Tempo.
+It checks every packaged file against the build output and verifies that each authored step is owned exactly once.

@@ -185,7 +185,11 @@ def pipeline_input_type(release_descriptor_path):
     if not artifacts:
         raise RuntimeError("Release descriptor does not declare a pipeline artifact")
 
-    artifact_path = Path(artifacts[0]["uri"])
+    artifact_uri = urllib.parse.urlsplit(artifacts[0]["uri"])
+    if (artifact_uri.scheme != "file" or artifact_uri.netloc not in {"", "localhost"}
+            or artifact_uri.query or artifact_uri.fragment):
+        raise RuntimeError("HA fixture requires a local file: artifact URI")
+    artifact_path = Path(urllib.request.url2pathname(artifact_uri.path))
     with zipfile.ZipFile(artifact_path) as jar:
         with jar.open("META-INF/pipeline/pipeline-contract.json") as contract_file:
             contract = json.load(contract_file)
@@ -225,13 +229,14 @@ def default_idempotency_key(args, input_file):
 def submit_csv_input_file(args, input_file, deadline):
     path = Path(input_file).resolve()
     folder = path.parent
+    input_type = pipeline_input_transport_type(args.release_descriptor_path)
+    payload = {"filepath": str(path), "csvFolderPath": str(folder)}
+    if input_type == V3_CSV_INPUT_FILE_TYPE:
+        payload["sourceIdentity"] = hashlib.sha256(path.read_bytes()).hexdigest()
     body = {
         "pipelineId": args.pipeline_id,
         "inputShape": "UNI",
-        "inputPayload": encoded_payload({
-            "filepath": str(path),
-            "csvFolderPath": str(folder),
-        }, pipeline_input_transport_type(args.release_descriptor_path)),
+        "inputPayload": encoded_payload(payload, input_type),
         "idempotencyKey": args.idempotency_key or default_idempotency_key(args, path),
         "outputStreaming": False,
     }
