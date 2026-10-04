@@ -68,6 +68,11 @@
         <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>
+        <tpf.release.input-csv-file-processing-svc.uri>file:///local-modular-release/input-csv-file-processing-svc.zip</tpf.release.input-csv-file-processing-svc.uri>
+        <tpf.release.payment-status-svc.uri>file:///local-modular-release/payment-status-svc.zip</tpf.release.payment-status-svc.uri>
+        <tpf.release.payments-processing-svc.uri>file:///local-modular-release/payments-processing-svc.zip</tpf.release.payments-processing-svc.uri>
+        <tpf.release.persistence-svc.uri>file:///local-modular-release/persistence-svc.zip</tpf.release.persistence-svc.uri>
+        <tpf.release.orchestrator-svc.uri>file:///local-modular-release/orchestrator-svc.zip</tpf.release.orchestrator-svc.uri>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>

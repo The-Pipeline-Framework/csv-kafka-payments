@@ -72,5 +72,57 @@ class ReleaseArtifactTest(unittest.TestCase):
                         self.assertIn(diagnostic, result.stderr)
 
 
+    def test_modular_closure_checks_each_host_and_compiled_metadata(self):
+        modules = ["input-csv-file-processing-svc", "payment-status-svc", "payments-processing-svc",
+                   "persistence-svc", "orchestrator-svc"]
+        for scenario in ("valid", "changed_host", "missing_host", "duplicate_step", "missing_carrier_metadata"):
+            for flags in ([], ["-O"]):
+                with self.subTest(scenario=scenario, flags=flags), tempfile.TemporaryDirectory(prefix="modular release ") as directory:
+                    root = Path(directory)
+                    carrier = root / "orchestrator-svc"
+                    contract = {"pipelineId": "example.app", "contractVersion": "sha256:contract",
+                                "steps": [{"authoredName": "Process input"}, {"authoredName": "Store"}]}
+                    metadata = json.dumps(contract).encode()
+                    artifacts = []
+                    for index, module in enumerate(modules):
+                        target = root / module / "target"
+                        files = {"quarkus-run.jar": b"launcher", "lib/runtime.jar": module.encode()}
+                        for name, content in files.items():
+                            path = target / "quarkus-app" / name
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_bytes(content)
+                        if module == "orchestrator-svc":
+                            path = target / "classes/META-INF/pipeline/pipeline-contract.json"
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_bytes(metadata)
+                            if scenario != "missing_carrier_metadata":
+                                files["META-INF/pipeline/pipeline-contract.json"] = metadata
+                        if scenario == "changed_host" and index == 2:
+                            files["lib/runtime.jar"] = b"changed"
+                        archive = target / "application.zip"
+                        with zipfile.ZipFile(archive, "w") as output:
+                            for name, content in files.items():
+                                output.writestr(name, content)
+                        artifacts.append({"artifactId": module, "kind": "application-archive", "uri": archive.as_uri(),
+                                          "digest": "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest(),
+                                          "stepIds": ["Process input"] if index == 0 else ["Store"] if index == 1 else []})
+                    if scenario == "missing_host":
+                        artifacts.pop(2)
+                    if scenario == "duplicate_step":
+                        artifacts[2]["stepIds"] = ["Store"]
+                    release = {"pipelineId": contract["pipelineId"], "contractVersion": contract["contractVersion"],
+                               "compiledTruthArtifactId": "orchestrator-svc", "artifacts": artifacts}
+                    (carrier / "target/pipeline-release.json").write_text(json.dumps(release))
+                    result = subprocess.run([sys.executable, *flags, str(VERIFIER), str(carrier)], capture_output=True, text=True)
+                    if scenario == "valid":
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        self.assertIn("5 complete archives", result.stdout)
+                    else:
+                        self.assertNotEqual(0, result.returncode, result.stdout)
+                        diagnostic = {"changed_host": "packaged bytes differ", "missing_host": "every host exactly once",
+                                      "duplicate_step": "artifact steps", "missing_carrier_metadata": "archive contents differ"}[scenario]
+                        self.assertIn(diagnostic, result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,7 +23,8 @@ class DemoClientReleaseTest(unittest.TestCase):
             artifact = Path(directory) / "pipeline runtime.jar"
             output = Path(directory) / "pipeline-release.json"
             contract = {"pipelineId": "org.pipelineframework.csv", "contractVersion": "contract-1",
-                        "steps": [{"authoredName": "ProcessCsvPaymentsInput"}],
+                        "steps": [{"authoredName": "ProcessCsvPaymentsInput", "index": 0,
+                                   "inputTypeId": demo_client.V3_CSV_INPUT_FILE_TYPE}],
                         "capabilities": {"localTransitionExecution": True,
                                          "transitionWorkerProtocols": ["local", "rest"]}}
             with zipfile.ZipFile(artifact, "w") as archive:
@@ -39,37 +40,43 @@ class DemoClientReleaseTest(unittest.TestCase):
             self.assertEqual(release_artifact["digest"], "sha256:" + hashlib.sha256(artifact.read_bytes()).hexdigest())
             self.assertEqual(release_artifact["stepIds"], ["ProcessCsvPaymentsInput"])
             self.assertEqual(release_artifact["capabilities"], ["local", "rest"])
+            self.assertEqual(demo_client.pipeline_input_type(output), demo_client.V3_CSV_INPUT_FILE_TYPE)
 
-
-class DemoClientArtifactUriTest(unittest.TestCase):
-    def test_submission_includes_stable_source_identity_for_current_canonical_input(self):
+    def test_pipeline_input_rejects_nonlocal_artifact_uris(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "payments.csv"
-            source.write_text("id,amount\n1,10\n")
-            args = SimpleNamespace(pipeline_id="pipeline", release_descriptor_path="release.json",
-                                   idempotency_key="key", base_url="http://localhost", tenant_id="tenant",
-                                   control_plane_token="test")
-            with patch.object(demo_client, "pipeline_input_transport_type", return_value=demo_client.V3_CSV_INPUT_FILE_TYPE), \
-                 patch.object(demo_client, "remaining_request_timeout", return_value=30), \
-                 patch.object(demo_client, "require_fixture_time"), \
-                 patch.object(demo_client, "request", return_value={"executionId": "exec"}) as request:
-                demo_client.submit_csv_input_file(args, source, 100)
-            payload = json.loads(request.call_args.kwargs["body"]["inputPayload"]["payload"])
-            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), payload["sourceIdentity"])
+            output = Path(directory) / "pipeline-release.json"
+            for uri in ["https://example.com/runtime.jar", "file://remote/runtime.jar",
+                        "file:///runtime.jar?query", "file:///runtime.jar#fragment"]:
+                with self.subTest(uri=uri):
+                    output.write_text(json.dumps({"artifacts": [{"uri": uri}]}))
+                    with self.assertRaisesRegex(RuntimeError, "local file:"):
+                        demo_client.pipeline_input_type(output)
 
-    def test_contract_reads_encoded_file_uri_and_legacy_local_path(self):
-        with tempfile.TemporaryDirectory(prefix="artifact with spaces ") as directory:
-            artifact = Path(directory) / "pipeline runtime.jar"
-            descriptor = Path(directory) / "release.json"
-            contract = {"steps": [{"index": 0, "inputTypeId": "Input"}]}
-            with zipfile.ZipFile(artifact, "w") as jar:
-                jar.writestr("META-INF/pipeline/pipeline-contract.json", json.dumps(contract))
-            for uri in (artifact.as_uri(), str(artifact)):
-                descriptor.write_text(json.dumps({"artifacts": [{"uri": uri}]}))
-                self.assertEqual("Input", demo_client.pipeline_input_type(descriptor))
-            descriptor.write_text(json.dumps({"artifacts": [{"uri": "https://example.test/runtime.jar"}]}))
-            with self.assertRaisesRegex(RuntimeError, "local artifact"):
-                demo_client.pipeline_input_type(descriptor)
+
+class DemoClientSubmissionTest(unittest.TestCase):
+
+    def test_submission_supplies_content_identity_for_canonical_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "payments.csv"
+            args = SimpleNamespace(pipeline_id="csv", release_descriptor_path="release.json",
+                                   idempotency_key="fixture", base_url="http://coordinator",
+                                   tenant_id="tenant", control_plane_token="fixture-token")
+            for input_type in [demo_client.V3_CSV_INPUT_FILE_TYPE,
+                               demo_client.V2_CSV_INPUT_FILE_TRANSPORT_TYPE]:
+                for content in [b"first snapshot", b"changed snapshot"]:
+                    with self.subTest(input_type=input_type, content=content):
+                        path.write_bytes(content)
+                        with patch.object(demo_client, "pipeline_input_transport_type", return_value=input_type), \
+                                patch.object(demo_client, "request", return_value={"executionId": "exec-1"}) as request:
+                            demo_client.submit_csv_input_file(args, path, demo_client.time.time() + 30)
+                        envelope = request.call_args.kwargs["body"]["inputPayload"]
+                        payload = json.loads(envelope["payload"])
+                        self.assertEqual(envelope["payloadTypeId"], input_type)
+                        self.assertEqual(payload["filepath"], str(path.resolve()))
+                        if input_type == demo_client.V3_CSV_INPUT_FILE_TYPE:
+                            self.assertEqual(payload["sourceIdentity"], hashlib.sha256(content).hexdigest())
+                        else:
+                            self.assertNotIn("sourceIdentity", payload)
 
 
 class DemoClientOutputValidationTest(unittest.TestCase):

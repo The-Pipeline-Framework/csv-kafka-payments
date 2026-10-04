@@ -78,6 +78,16 @@ jobs:
         if: matrix.lane == 'monolith'
         run: python3 scripts/check-release-artifacts.py monolith-svc
 
+      - name: Produce and check modular Release from existing packages
+        if: matrix.lane == 'provider-reject' || matrix.lane == 'tempo'
+        run: |
+          ./mvnw -B -pl orchestrator-svc \
+            org.pipelineframework:pipelineframework-release-maven-plugin:generate-release-descriptor@produce-modular-release \
+            org.codehaus.mojo:build-helper-maven-plugin:attach-artifact@attach-modular-release-archives \
+            -Dtpf.release.skip=false -Dtpf.release.version="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -Dtpf.release.allowLocalUris=true -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
+          python3 scripts/check-release-artifacts.py orchestrator-svc
+
       - name: Run the selected E2E proof
         shell: bash
         run: |
