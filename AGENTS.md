@@ -3,7 +3,7 @@
 ## Development dependency policy
 
 - Development on `main` follows the active TPF snapshot line, currently `26.10.1-SNAPSHOT`; do not pin another TPF component to `26.9.4` or an older snapshot line.
-- Maven requires a version: do not use `LATEST`, `RELEASE`, or version ranges to stand in for Git `main`. Applications should select the snapshot product BOM; retained component properties are compatibility-test override points, not separate application version choices.
+- Maven requires a version: do not use `LATEST`, `RELEASE`, or version ranges to stand in for Git `main`. Select TPF dependencies and annotation processors through `pipelineframework.bom.version`; do not add independent compiler/runtime/Connector version choices. The imported BOM cannot manage Maven plugins, so `tpf.release.maven-plugin.version` is the separate release-plugin version and compatibility-test override point. Keep both properties declared exactly once for system-test materialisation.
 - `.mvn/maven.config` includes `-U` so cached snapshot metadata is refreshed. Every Maven invocation still needs the isolated local repository required below.
 - Maven-producing repositories publish Central snapshots on pushes to `main` and manually for recovery. Nightly full-train testing remains separate; snapshot publication is not scheduled nightly. Publication is asynchronous, not an atomic cross-repository transaction; a green merge alone does not mean publication completed. Check the publisher before retrying dependent builds.
 - Coordinated changes use compatibility sets before merge. Those runs continue to use exact immutable candidate/baseline versions, not floating snapshots. No composite source reactor or extra Maven profile is introduced.

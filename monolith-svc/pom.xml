@@ -30,7 +30,6 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>representation-provider-opencsv</artifactId>
-            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework.csv</groupId>
@@ -44,12 +43,10 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>persistence-plugin</artifactId>
-            <version>${pipelineframework.runtime.version}</version>
         </dependency>
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>object-ingest-connector</artifactId>
-            <version>${pipelineframework.connectors.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -207,7 +204,7 @@
             <plugin>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>pipelineframework-release-maven-plugin</artifactId>
-                <version>${pipelineframework.runtime.version}</version>
+                <version>${tpf.release.maven-plugin.version}</version>
                 <configuration>
                     <artifactKind>application-archive</artifactKind>
                     <artifactFile>${project.build.directory}/quarkus-app</artifactFile>

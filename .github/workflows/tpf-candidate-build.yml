@@ -30,6 +30,8 @@ jobs:
           java-version: '21'
           cache: maven
           cache-path: ${{ github.workspace }}/.m2/repository
+      - name: Check application dependency contract
+        run: python3 scripts/test-application-dependencies.py
       - name: Run owner CI-equivalent Maven lifecycle once
         run: ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
       - name: Create source build metadata and checksum

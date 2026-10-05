@@ -63,10 +63,17 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 if [[ -n "${MAVEN_ARGS:-}" ]]; then
-                  echo "MAVEN_ARGS leaked into project-version evaluation" >&2
+                  echo "MAVEN_ARGS leaked into effective-POM evaluation" >&2
                   exit 42
                 fi
-                printf '26.8.2-SNAPSHOT\\n'
+                for arg in "$@"; do
+                  case "$arg" in
+                    -Doutput=*)
+                      printf '%s\\n' '<project xmlns="http://maven.apache.org/POM/4.0.0"><dependencyManagement><dependencies><dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework</artifactId><version>26.8.2-SNAPSHOT</version></dependency></dependencies></dependencyManagement></project>' > "${arg#-Doutput=}"
+                      ;;
+                  esac
+                done
+                printf 'Apache Maven banner: not a dependency version\\n'
                 """);
         assertTrue(fakeMaven.toFile().setExecutable(true));
 
@@ -78,16 +85,17 @@ class AbstractCsvPaymentsEndToEndPackagingTest {
                         resolver.toString(),
                         fakeMaven.toString(),
                         tempDir.resolve("pom.xml").toString(),
-                        tempDir.resolve("repository").toString())
-                .redirectErrorStream(true);
+                        tempDir.resolve("repository").toString());
         processBuilder.environment().put("MAVEN_ARGS", "-B -V --no-transfer-progress");
         Process process = processBuilder.start();
         process.getOutputStream().close();
         String output = new String(process.getInputStream().readAllBytes());
+        String diagnostics = new String(process.getErrorStream().readAllBytes());
 
         assertTrue(process.waitFor(10, TimeUnit.SECONDS));
-        assertEquals(0, process.exitValue(), output);
+        assertEquals(0, process.exitValue(), diagnostics);
         assertEquals("26.8.2-SNAPSHOT", output.strip());
+        assertTrue(diagnostics.contains("Apache Maven banner"), diagnostics);
     }
 
     @Test
