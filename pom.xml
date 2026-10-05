@@ -62,10 +62,10 @@
     </modules>
 
     <properties>
-        <pipelineframework.bom.version>26.9.4-SNAPSHOT</pipelineframework.bom.version>
+        <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
         <pipelineframework.compiler.version>26.10.1-SNAPSHOT</pipelineframework.compiler.version>
         <pipelineframework.runtime.version>26.10.1-SNAPSHOT</pipelineframework.runtime.version>
-        <pipelineframework.connectors.version>26.9.4-SNAPSHOT</pipelineframework.connectors.version>
+        <pipelineframework.connectors.version>26.10.1-SNAPSHOT</pipelineframework.connectors.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>
         <tpf.release.input-csv-file-processing-svc.uri>file:///local-modular-release/input-csv-file-processing-svc.zip</tpf.release.input-csv-file-processing-svc.uri>
