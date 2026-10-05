@@ -12,7 +12,7 @@ FRAMEWORK_VERSION="$(
 FRAMEWORK_COORDINATE="org.pipelineframework:pipelineframework:${FRAMEWORK_VERSION}"
 FRAMEWORK_RUNTIME_JAR="$MAVEN_REPOSITORY/org/pipelineframework/pipelineframework/${FRAMEWORK_VERSION}/pipelineframework-${FRAMEWORK_VERSION}.jar"
 
-"$ROOT_DIR/mvnw" -q dependency:get \
+"$ROOT_DIR/mvnw" -q -f "$ROOT_DIR/pom.xml" dependency:get \
   -Dartifact="$FRAMEWORK_COORDINATE" \
   -Dtransitive=false \
   -Dmaven.repo.local="$MAVEN_REPOSITORY"

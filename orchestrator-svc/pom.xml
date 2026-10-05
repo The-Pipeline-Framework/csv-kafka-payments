@@ -166,7 +166,7 @@
                             <kind>application-archive</kind>
                             <file>${project.parent.basedir}/input-csv-file-processing-svc/target/quarkus-app</file>
                             <uri>${tpf.release.input-csv-file-processing-svc.uri}</uri>
-                            <stepIds><stepId>ProcessCsvPaymentsInput</stepId></stepIds>
+                            <stepIds><stepId>Process Csv Payments Input</stepId></stepIds>
                             <capabilities></capabilities>
                         </artifact>
                         <artifact>
@@ -174,7 +174,7 @@
                             <kind>application-archive</kind>
                             <file>${project.parent.basedir}/payment-status-svc/target/quarkus-app</file>
                             <uri>${tpf.release.payment-status-svc.uri}</uri>
-                            <stepIds><stepId>ProcessApprovedPaymentStatus</stepId><stepId>ProcessUnapprovedPaymentStatus</stepId><stepId>Finalize Payment Output</stepId></stepIds>
+                            <stepIds><stepId>Process Approved Payment Status</stepId><stepId>Process Unapproved Payment Status</stepId><stepId>Finalize Payment Output</stepId></stepIds>
                             <capabilities></capabilities>
                         </artifact>
                         <artifact>
