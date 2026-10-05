@@ -44,5 +44,8 @@ jobs:
       - name: Check release build lifecycle
         run: python3 scripts/test-release-build.py
 
+      - name: Check release step identities
+        run: python3 scripts/test-release-step-identities.py
+
       - name: Check release verifier
         run: python3 scripts/test_release_artifacts.py
