@@ -35,6 +35,9 @@ jobs:
       - name: Check observability proof launcher
         run: python3 -m unittest discover -s self-host/container -p test_observability_runner.py
 
+      - name: Check HA failure diagnostics
+        run: python3 -m unittest -v self-host/container/test_ha_diagnostics.py
+
       - name: Check application dependency contract
         run: python3 scripts/test-application-dependencies.py
 
