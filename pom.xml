@@ -63,9 +63,8 @@
 
     <properties>
         <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
-        <pipelineframework.compiler.version>26.10.1-SNAPSHOT</pipelineframework.compiler.version>
-        <pipelineframework.runtime.version>26.10.1-SNAPSHOT</pipelineframework.runtime.version>
-        <pipelineframework.connectors.version>26.10.1-SNAPSHOT</pipelineframework.connectors.version>
+        <!-- Maven plugins are not managed by an imported dependency BOM. -->
+        <tpf.release.maven-plugin.version>26.10.1-SNAPSHOT</tpf.release.maven-plugin.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>
         <tpf.release.input-csv-file-processing-svc.uri>file:///local-modular-release/input-csv-file-processing-svc.zip</tpf.release.input-csv-file-processing-svc.uri>
@@ -141,12 +140,6 @@
                 <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
-            <!-- Keep transitive runtime consumers aligned with the declared runtime version. -->
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework</artifactId>
-                <version>${pipelineframework.runtime.version}</version>
             </dependency>
             <!-- Pipeline Framework BOM -->
             <dependency>
@@ -380,6 +373,7 @@
                         <release>21</release>
                         <enablePreview>true</enablePreview>
                         <useIncrementalCompilation>false</useIncrementalCompilation>
+                        <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
@@ -400,12 +394,10 @@
                             <path>
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>pipelineframework-compiler</artifactId>
-                                <version>${pipelineframework.compiler.version}</version>
                             </path>
                             <path>
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>representation-provider-opencsv</artifactId>
-                                <version>${pipelineframework.connectors.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

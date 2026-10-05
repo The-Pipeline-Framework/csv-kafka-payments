@@ -32,6 +32,9 @@ jobs:
           cache: maven
           cache-path: ${{ github.workspace }}/.m2/repository
 
+      - name: Check application dependency contract
+        run: python3 scripts/test-application-dependencies.py
+
       - name: Check framework provenance version resolution
         run: python3 scripts/test-framework-version.py
 
