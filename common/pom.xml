@@ -32,10 +32,20 @@
     </properties>
 
     <dependencies>
+        <!-- Build-only: the generator goals below call compiler entry points directly. -->
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework-compiler</artifactId>
             <scope>provided</scope>
+        </dependency>
+        <!-- Authored mappers directly consume these BOM-managed contracts. -->
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-runtime-spi</artifactId>
         </dependency>
         <!-- Pipeline Framework Runtime Module -->
         <dependency>

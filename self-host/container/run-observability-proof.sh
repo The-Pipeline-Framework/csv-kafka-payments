@@ -14,7 +14,12 @@ export TPF_CSV_RUNTIME_IMAGE="${IMAGE_REGISTRY:-localhost}/${IMAGE_GROUP:-csv-pa
 export TPF_CSV_PERSISTENCE_IMAGE="${IMAGE_REGISTRY:-localhost}/${IMAGE_GROUP:-csv-payments}/persistence-svc:$IMAGE_TAG"
 export TPF_CSV_RECORD_COUNT=12 TPF_CSV_ADMISSION_PROFILE=burst
 export TPF_KEEP_STACK=true TPF_KEEP_STACK_ON_FAILURE=true
-export TPF_MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$PWD/.m2/repository"
+export TPF_MAVEN_ARGS="${MAVEN_ARGS:-}"
+# Compatibility runs put their generated BOM and candidates in a shared repository.
+# Only use the checkout-local cache when the caller has not supplied that repository.
+if [[ " $TPF_MAVEN_ARGS " != *" -Dmaven.repo.local="* ]]; then
+  export TPF_MAVEN_ARGS="$TPF_MAVEN_ARGS -Dmaven.repo.local=$PWD/.m2/repository"
+fi
 compose_files=(-f self-host/container/compose.yaml -f self-host/container/compose.observability.yaml)
 cleanup() {
   local status=$?

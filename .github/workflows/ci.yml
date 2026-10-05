@@ -32,6 +32,9 @@ jobs:
           cache: maven
           cache-path: ${{ github.workspace }}/.m2/repository
 
+      - name: Check observability proof launcher
+        run: python3 -m unittest discover -s self-host/container -p test_observability_runner.py
+
       - name: Check application dependency contract
         run: python3 scripts/test-application-dependencies.py
 

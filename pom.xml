@@ -62,8 +62,26 @@
     </modules>
 
     <properties>
+        <!--
+        ================================================================================
+        TPF DEPENDENCY VERSIONS: SELECT ONE BOM
+
+        The BOM owns the compatible contracts, compiler, runtime, connector, plugin and
+        Block versions. Component repositories may publish different versions; applications
+        select the tested set with this one BOM version, not component overrides.
+        Runtime/connector/plugin dependencies and the compiler's annotation-processor path
+        use BOM-managed versions. Contracts arrive transitively; declare a versionless
+        contract dependency only when application code directly uses its APIs.
+        The compiler is a build tool, not supplied by the runtime. common also needs it
+        as provided for its explicit protobuf/domain generator goals.
+
+        Maven build plugins are the exception: imported dependency management cannot set
+        their versions. The separately named release Maven plugin property below selects
+        that build tool only; it does not override runtime dependencies or the BOM.
+        Compatibility tests inject a tested BOM plus that explicit build-plugin pin.
+        ================================================================================
+        -->
         <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
-        <!-- Maven plugins are not managed by an imported dependency BOM. -->
         <tpf.release.maven-plugin.version>26.10.1-SNAPSHOT</tpf.release.maven-plugin.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>

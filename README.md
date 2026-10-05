@@ -1,70 +1,404 @@
-[![CI](https://github.com/The-Pipeline-Framework/csv-kafka-payments/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Pipeline-Framework/csv-kafka-payments/actions/workflows/ci.yml)
-
 # CSV Kafka Payments
 
-## Overview
+[![CI](https://github.com/The-Pipeline-Framework/csv-kafka-payments/actions/workflows/ci.yml/badge.svg)](https://github.com/The-Pipeline-Framework/csv-kafka-payments/actions/workflows/ci.yml)
 
-CSV Kafka Payments is a Quarkus-based microservices application designed to process CSV files containing payment information. It reads payment records from input CSV files, dispatches each payment to a mock external provider through a durable Kafka-backed await boundary, resumes when provider completions arrive, and generates output CSV files with the processed results.
+Process a CSV file of payments, wait for an asynchronous mock provider to complete each payment,
+and write the final results to an output CSV. This Quarkus application uses The Pipeline Framework
+(TPF) for typed steps, reactive execution, durable Await completion, persistence and object I/O.
 
-This is a standalone application repository. It consumes released TPF compiler, runtime, and connector artifacts and does not require a Pipeline Framework source checkout.
+The modular application uses gRPC between step services and Kafka for provider requests and
+completions. The self-hosted HA reference also supports SQS. This repository consumes published
+TPF artifacts; you do not need a framework source checkout.
 
-This application demonstrates modern microservices architecture patterns using gRPC for service-to-service steps, Kafka for external provider completion, and TPF queue-async orchestration for durable suspend/resume. It simulates the complexities of real-world asynchronous payment processing systems without making the mock provider part of the pipeline itself.
+- [Getting started](#getting-started)
+- [Data flow](#data-flow)
+- [Runtime layouts](#runtime-layouts) and [repository structure](#repository-structure)
+- [Configuration and local development](#configuration)
+- [Testing](#testing)
+- [Observability and replay](#observability)
+- [Release production](#release-production)
+- [Documentation and contributing](#documentation)
 
-## Key Features
+## Getting Started
 
-- **Microservices Architecture**: Modular design with independently deployable services
-- **Durable Await Boundary**: Payment-provider calls suspend the pipeline and resume from correlated Kafka completions
-- **Reactive Programming**: Non-blocking framework execution using Mutiny
-- **gRPC Communication**: High-performance service-to-service communication
-- **Kafka Request/Completion Flow**: Framework-owned await dispatch envelopes and provider-owned completion envelopes
-- **Virtual Threads**: Optional execution mode for selected steps
-- **Rate Limiting Simulation**: Realistic throttling behavior
-- **Retry Logic**: Automatic retries for transient failures
-- **Parallel Processing**: Concurrent handling of multiple payment records
-- **Comprehensive Logging**: Detailed observability and debugging information
+### Prerequisites
 
-## Await/Kafka Payment Flow
+- JDK 21, including `java` and `keytool`.
+- Docker with Docker Compose for container builds and end-to-end runs.
+- Bash, Python 3 and OpenSSL for the self-hosted harness and development certificates.
+
+Use the included Maven wrapper. Run the commands below from the repository root, and keep Maven
+artifacts in this checkout's `.m2/repository`.
+
+### Installation
+
+```bash
+git clone https://github.com/The-Pipeline-Framework/csv-kafka-payments.git
+cd csv-kafka-payments
+```
+
+### First complete run
+
+The self-hosted harness builds the application images, starts the infrastructure and services,
+submits a CSV, verifies the output and tears down the stack in CI mode. To use Kafka completions:
+
+```bash
+TPF_CSV_AWAIT_TRANSPORT=kafka ./self-host/container/run-container-ha-demo.sh --ci
+```
+
+For the SQS version, use the harness's default:
+
+```bash
+./self-host/container/run-container-ha-demo.sh --ci
+```
+
+Both runs use a durable coordinator, a REST transition worker, a grouped pipeline runtime,
+PostgreSQL persistence and LocalStack-backed coordinator stores. See the
+[self-hosted reference](self-host/container/README.md) for configuration, admission profiles,
+output locations and keeping a stack running for inspection.
+
+### Build and unit tests
+
+Build the default modular application without container images:
+
+```bash
+./mvnw -B clean package -DskipTests -Dquarkus.container-image.build=false \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+Run the unit-test reactor:
+
+```bash
+./mvnw -B test -Dquarkus.container-image.build=false \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+### TPF dependency versions
+
+**The application selects one TPF BOM version.** The BOM owns the compatible component set;
+contracts, compiler, runtime, connectors, plugins and Blocks may have different versions
+inside that set. Application dependencies use the BOM's managed versions rather than
+selecting component versions separately.
+
+| Component | How this application consumes it |
+| --- | --- |
+| Runtime | `pipelineframework` is a versionless dependency that executes generated adapters. |
+| Contracts | Normally supplied transitively. `common` explicitly declares the versionless API and runtime SPI artifacts because its authored mappers directly use them. |
+| Compiler | A build-time annotation processor with its version resolved from the BOM. `common` also declares it as `provided` because its protobuf/domain generator goals call compiler entry points directly; it is not packaged as an application runtime dependency. |
+| Connectors and runtime plugins | Versionless dependencies managed by the BOM, including OpenCSV, Object Ingest and persistence. |
+
+The release **Maven build plugin** is a separate build tool. Maven cannot manage build-plugin
+versions through an imported dependency BOM, so `tpf.release.maven-plugin.version` remains
+explicit. It does not override the runtime dependency version. Compatibility tests supply
+one unpublished tested BOM for dependencies and an exact pin for this build plugin.
+
+A new component snapshot does not automatically update a published BOM. The BOM must be
+promoted with the compatible artifacts before an ordinary application build can consume
+new APIs; application overrides should not be used to conceal an outdated BOM.
+
+For other application layouts, see [Runtime layouts](#runtime-layouts). Container and integration
+checks are grouped under [Testing](#testing).
+
+## Data Flow
 
 The canonical modular flow is:
 
-1. Object Ingest admits matching CSV objects into queue-async executions.
-2. `Process Csv Payments Input` opens the pinned object snapshot in pages of 1,000 logical OpenCSV records. The user still submits one CSV object; quoted multiline and UTF-8 records stay parser-valid across provider-opaque checkpoints.
-3. `Process Csv Payments Input` is an authored expansion operation with `await:`; every emitted `PaymentRecord` becomes one trusted request and one durable completion interaction.
-4. The Kafka await adapter publishes request envelopes to `csv-payments.payment.requests`.
-5. `payments-processing-svc` acts as the external mock provider, consumes those envelopes, calls `PaymentProviderServiceMock`, and publishes completion envelopes to `csv-payments.payment.results`.
-6. The TPF Kafka completion consumer admits each completion idempotently. A live owner hands admitted item completions directly to downstream status processing as demand permits; durable fallback resumes the owning queue-async execution after the await unit completes and reconstructs the ordered `PaymentStatus` union variants.
-7. `Process Approved Payment Status` and `Process Unapproved Payment Status` handle the two provider outcomes, then `Finalize Payment Output` merges them into the terminal `PaymentOutput`.
-8. Object Publish streams terminal `PaymentOutput` values into grouped CSV output files.
+1. Object Ingest admits each matching CSV object into a queue-async execution.
+2. `Process Csv Payments Input` reads the pinned object in pages of 1,000 logical OpenCSV
+   records, preserving quoted multiline and UTF-8 records across checkpoints.
+3. This `ONE_TO_MANY` operation has an `await:` modifier. Each emitted `PaymentRecord` becomes
+   one trusted provider request and one durable completion interaction.
+4. The Kafka adapter publishes requests to `csv-payments.payment.requests`.
+5. The external mock provider in `payments-processing-svc` calls `PaymentProviderServiceMock`
+   and publishes completions to `csv-payments.payment.results`.
+6. TPF admits completions idempotently. A live owner continues downstream as demand permits;
+   durable fallback resumes the execution after the Await unit completes and reconstructs
+   ordered `PaymentStatus` variants.
+7. Approved and unapproved status steps handle the provider outcomes. `Finalize Payment Output`
+   merges their branches into the terminal `PaymentOutput`.
+8. Object Publish streams those outputs into grouped CSV files.
 
-This is durable brokered completion, not polling. Kafka delivery remains at-least-once; TPF handles idempotent completion admission and ordered await-unit reconstruction for the resumed pipeline.
+Kafka delivery is at-least-once. TPF admits completions idempotently and reconstructs an ordered
+Await unit when the owning execution resumes.
 
-The CSV example persists pre-await and post-await service outputs. Queue-async resume is at-least-once from the await boundary onward, so persisted CSV entities use stable business IDs and the persistence runtime uses `persistence.duplicate-key=ignore`; duplicate redelivery becomes a no-op instead of a second business row.
+The application persists pre-Await and post-Await service outputs. Resume is at-least-once from
+the Await boundary onward, so persisted entities use stable business IDs and
+`persistence.duplicate-key=ignore`. Duplicate redelivery becomes a no-op.
 
-The orchestrator must run in queue-async mode and needs a stable resume-token secret:
+```mermaid
+sequenceDiagram
+    participant User
+    participant Orchestrator
+    participant ObjectIngest
+    participant InputService
+    participant AwaitUnit
+    participant Kafka
+    participant Provider
+    participant StatusService
+    participant ObjectPublish
+
+    User->>Orchestrator: Start processing
+    Orchestrator->>ObjectIngest: Poll configured object source
+    ObjectIngest-->>Orchestrator: Admit CSV object execution
+    Orchestrator->>InputService: Open bounded CSV page
+    loop For each payment record, as demand permits
+        InputService-->>Orchestrator: PaymentRecord
+        Orchestrator->>AwaitUnit: Create item interaction
+        AwaitUnit->>Kafka: Publish provider request
+        Kafka->>Provider: Deliver request
+        Provider-->>Kafka: PaymentStatus completion
+        Kafka-->>AwaitUnit: Admit completion
+        AwaitUnit-->>Orchestrator: Release item continuation
+        Orchestrator->>StatusService: Process status and merge output
+        StatusService-->>Orchestrator: PaymentOutput
+        Orchestrator->>ObjectPublish: Stream terminal item
+    end
+    Orchestrator->>ObjectPublish: Complete and compose output
+    ObjectPublish-->>User: Published CSV result
+```
+
+### Expected CSV Output Columns
+
+The output columns are `AMOUNT`, `CSV ID`, `CURRENCY`, `FEE`, `MESSAGE`, `RECIPIENT`,
+`REFERENCE` and `STATUS`. Sample inputs are in
+[input-csv-file-processing-svc/csv](input-csv-file-processing-svc/csv).
+
+### Object I/O Backpressure
+
+One source object becomes one user-visible queue-async execution. The coordinator opens one
+bounded page at a time, the parser emits rows on downstream demand, and an active Await session
+hands completions to the live continuation. Object Publish streams attempt-safe page parts, then
+composes them in page order into one output object after source exhaustion.
+
+The page bound counts logical records, including blank or rejected records, but excludes the
+header. OpenCSV checkpoints pin file identity, size and modification time; a mismatch fails
+deterministically. Failure or cancellation reopens the same page start. Completed pages are
+not reread.
+
+The current path uses reactive demand and the Await in-flight window. `BlockingIteratorPacer`
+remains a blocking-thread throttle for the deprecated file-step path. Shape the demo with provider
+concurrency/retry settings and the object I/O connector's admission/write settings.
+
+## Runtime Layouts
+
+Runtime layout describes where the pipeline runs; build topology describes its Maven modules,
+JARs and containers. gRPC and LOCAL are step transport modes. Kafka and SQS carry external
+provider requests and completions independently of that choice.
+
+| Layout | Shape | Build entry point |
+| --- | --- | --- |
+| Modular | Separate orchestrator, input, status, provider and persistence hosts | Root Maven reactor; telemetry image helpers below |
+| Pipeline runtime | Grouped pipeline execution with separate orchestration and persistence | `build-pipeline-runtime.sh` |
+| Monolith | Pipeline execution in one runnable application with generated LOCAL clients | `build-monolith.sh` |
+
+```bash
+./build-pipeline-runtime.sh -DskipTests -Dquarkus.container-image.build=false \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+./build-monolith.sh -DskipTests -Dquarkus.container-image.build=false \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+The layout helpers apply their runtime mapping during the build and restore the previous
+configuration afterwards. The monolith helper first generates LOCAL clients through the
+orchestrator module. Its `tpf.build.transport=LOCAL` switch controls generation; the packaged
+monolith already contains the required clients. Monolith E2E tests live in `orchestrator-svc`
+and launch the application from `monolith-svc`.
+
+The modular image helpers select the strict modular mapping:
+
+| Helper | Purpose |
+| --- | --- |
+| `build-modular-telemetry-images.sh` | Replay-enabled modular E2E and provider-rejection captures |
+| `build-modular-observability-images.sh` | Live metrics and tracing verification against LGTM |
+
+## Repository Structure
+
+| Path | Responsibility |
+| --- | --- |
+| [config](config) | Canonical pipeline, IDL lock and runtime mappings |
+| [common](common/README.md) | Shared representations, mappers and generated protobuf contracts |
+| [input-csv-file-processing-svc](input-csv-file-processing-svc/README.md) | Paged CSV parsing and the authored provider-request operation |
+| [payments-processing-svc](payments-processing-svc/README.md) | External mock provider for brokered completions |
+| [payment-status-svc](payment-status-svc/README.md) | Approved/unapproved status handling and terminal output merge |
+| [persistence-svc](persistence-svc) | Persistence host |
+| [orchestrator-svc](orchestrator-svc/README.md) | Orchestration, end-to-end tests, replay and dashboard resources |
+| [pipeline-runtime-svc](pipeline-runtime-svc) | Grouped pipeline runtime |
+| [monolith-svc](monolith-svc) | Single-process pipeline application |
+| [self-host/container](self-host/container/README.md) | HA container harness and operational proofs |
+| [terraform](terraform) | Infrastructure configuration |
+
+The application uses Quarkus, Mutiny, gRPC, Kafka, OpenCSV, MapStruct and Lombok. Tests use
+JUnit 5, Mockito and Testcontainers. Protobufs are generated from `config/pipeline.yaml` during
+`generate-sources` and placed in `common/target/generated-sources/proto`.
+
+## Configuration
+
+Use the canonical configuration and each host's properties rather than copying settings between
+layouts. The self-hosted Compose stack has its own ports and deployment overrides.
+
+| Configuration | Purpose |
+| --- | --- |
+| [config/pipeline.yaml](config/pipeline.yaml) | Types, steps, paging, Await transport and persistence aspects |
+| `config/pipeline.runtime.yaml` | Active runtime placement, applied by the layout helpers |
+| [config/runtime-mapping](config/runtime-mapping) | Modular, grouped and monolith mappings |
+| [orchestrator properties](orchestrator-svc/src/main/resources/application.properties) | Admission, retry, concurrency, clients and telemetry |
+| [provider properties](payments-processing-svc/src/main/resources/application.properties) | Kafka/SQS provider and simulated outcomes |
+| [persistence properties](persistence-svc/src/main/resources/application.properties) | Database and duplicate-key handling |
+| [self-hosted reference](self-host/container/README.md) | Container settings, ports and durable stores |
+
+The queue-async orchestrator requires a stable resume-token secret:
 
 ```properties
 pipeline.orchestrator.mode=QUEUE_ASYNC
 pipeline.orchestrator.resume-token-secret=${PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET}
 ```
 
-The modular example uses these Kafka topics by default:
+The modular Kafka topics default to `csv-payments.payment.requests` and
+`csv-payments.payment.results`. Keep the secret stable across retries and host restarts.
 
-```properties
-csv-payments.payment.requests
-csv-payments.payment.results
-```
+### Mock Payment Provider Simulation
 
-## Containerized Self-Hosted HA Reference
+Provider throttling is controlled by `csv-payments.payment-provider.permits-per-second` and
+`csv-payments.payment-provider.timeout-millis`. These additional probabilities range from
+`0.0` to `1.0`:
 
-For a compute-first self-hosted HA reference with a durable coordinator, REST transition worker, broker-backed await completions, Postgres persistence, and LocalStack-backed DynamoDB/SQS/S3-compatible coordinator stores:
+- `csv-payments.payment-provider.provider-timeout-probability`
+- `csv-payments.payment-provider.provider-reject-probability`
+
+The mock derives outcomes deterministically from stable payment identifiers. Rejected payments
+follow the unapproved `PaymentStatus` branch and still produce normal output rows; technical
+timeouts enter the retry path. Malformed CSV input currently fails at file scope.
+
+The explicit terminal step `Finalize Payment Output` merges the approved and unapproved branches
+before Object Publish writes their shared `PaymentOutput` representation. The sink does not
+perform that branch merge itself.
+
+### Port Configuration
+
+These are the modular services' default HTTPS ports. Consult the
+[self-hosted port table](self-host/container/README.md#local-defaults) for Compose runs.
+
+| Host | HTTPS port |
+| --- | --- |
+| Orchestrator | 8443 |
+| Input processing | 8444 |
+| Mock provider | 8445 |
+| Payment status | 8446 |
+| Persistence | 8448 |
+
+### Running the Application
+
+For IDE development, use Quarkus development mode and the [IDE configuration](ide-config).
+For manual packaged starts, first build the modular application and configure Kafka, PostgreSQL,
+service endpoints and development certificates. Start the long-running hosts in separate terminals,
+then run the orchestrator:
 
 ```bash
-./self-host/container/run-container-ha-demo.sh --ci
+java --enable-preview -jar persistence-svc/target/quarkus-app/quarkus-run.jar
+java --enable-preview -jar input-csv-file-processing-svc/target/quarkus-app/quarkus-run.jar
+java --enable-preview -jar payments-processing-svc/target/quarkus-app/quarkus-run.jar
+java --enable-preview -jar payment-status-svc/target/quarkus-app/quarkus-run.jar
+java --enable-preview -jar orchestrator-svc/target/quarkus-app/quarkus-run.jar --ingest-once
 ```
 
-This is the advanced stream-await self-host HA reference. It uses SQS by default for the AWS-shaped LocalStack lane. Run `TPF_CSV_AWAIT_TRANSPORT=kafka ./self-host/container/run-container-ha-demo.sh --ci` to prove the same coordinator/worker topology with Kafka await completions.
+The automated harness in [Getting started](#getting-started) handles these prerequisites for a
+complete container run. See the [orchestrator README](orchestrator-svc/README.md) for entry options.
 
-## Running End-to-End Tests
+<details>
+<summary>Native builds</summary>
+
+The native CI workflow builds the four runnable services independently. To
+build the same executables locally with Docker available:
+
+```bash
+for service in orchestrator-svc input-csv-file-processing-svc payments-processing-svc payment-status-svc; do
+  native_args=--enable-preview
+  if [ "$service" = input-csv-file-processing-svc ]; then
+    native_args=--enable-preview,--initialize-at-run-time=org.apache.commons.logging.impl.Log4jApiLogFactory
+  fi
+  ./mvnw -B -f pom.xml -pl "$service" -am -DskipTests \
+    -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true \
+    -Dquarkus.native.container-build=true \
+    "-Dquarkus.native.additional-build-args=$native_args" \
+    -Dmaven.repo.local="$PWD/.m2/repository" package
+done
+
+# With the required infrastructure and persistence host already running,
+# start each service in a separate terminal
+./input-csv-file-processing-svc/target/*-runner
+./payments-processing-svc/target/*-runner
+./payment-status-svc/target/*-runner
+
+# Run the orchestrator-svc as a CLI application (after all services are up)
+./orchestrator-svc/target/*-runner --ingest-once
+
+# Note: You'll need to stop each service manually in each terminal
+```
+
+</details>
+
+### SSL Certificate Handling in Development
+
+The build generates development certificates under `target/dev-certs`. To regenerate them:
+
+```bash
+./generate-dev-certs.sh
+```
+
+<details>
+<summary>Trusting a development certificate on macOS</summary>
+
+With the input service running, export its certificate and add it to your user keychain:
+
+```bash
+echo | openssl s_client -connect localhost:8444 2>/dev/null | openssl x509 > /tmp/quarkus-cert.pem
+security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db /tmp/quarkus-cert.pem
+```
+
+Restart the browser after adding trust. If the browser reports a common-name error, check the
+certificate's Subject Alternative Names. Stop services before regenerating certificates and
+restart them afterwards. These certificates are for local development.
+
+</details>
+
+## Testing
+
+The unit-test command is in [Getting started](#build-and-unit-tests). For coverage:
+
+```bash
+./mvnw clean test jacoco:report -Dquarkus.container-image.build=false \
+  -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+### Running End-to-End Tests
+
+A modular run starts the required infrastructure and hosts, waits for readiness, processes a CSV
+and verifies its output. Build the replay-capable images before running the test:
+
+```bash
+./build-modular-telemetry-images.sh
+./mvnw -f pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.prebuilt.modular.images=true \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_12.csv \
+  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
+```
+
+For durable coordinator/worker coverage, run the [self-hosted harness](#first-complete-run).
+[Live export proofs](#tempo--lgtm-verification) and [replay captures](#replay-viewer) are separate
+checks, with their own recipes below.
+
+### Runtime-mapping matrix
+
+```bash
+MAVEN_ARGS="-Dmaven.repo.local=$PWD/.m2/repository" ./run-runtime-mapping-matrix.sh
+MAVEN_ARGS="-Dmaven.repo.local=$PWD/.m2/repository" ./run-runtime-mapping-matrix.sh --with-e2e
+```
+
+The matrix swaps `config/pipeline.runtime.yaml` for `modular-auto`, `modular-strict` and
+`pipeline-runtime`, then restores it. It validates mapping/build and functional behaviour;
+it does not assert deployment topology. Monolith has its own build and E2E lane.
 
 ### CI safety lanes
 
@@ -92,141 +426,45 @@ scale workflow runs on `main`, weekdays at 03:00 UTC, and manual dispatch.
 HA and scale failures are separate from the application layout and
 observability jobs above.
 
-To run the end-to-end integration test that starts all services and processes a sample CSV file:
+## Observability
 
-1. Ensure you have Java 21 and Maven installed
-2. Navigate to the project root directory
-3. Run the end-to-end test script:
-   ```bash
-   ./run-e2e-test.sh
-   ```
+Choose the surface that answers your question:
 
-This script will:
-1. Start Postgres, Kafka, and all required microservices
-2. Wait for all services to become healthy by checking their health endpoints
-3. Copy a sample CSV file to the test directory
-4. Run the orchestrator to process the CSV file
-5. Verify that output files are generated
-6. Stop all services
+| Surface | Purpose | Entry point |
+| --- | --- | --- |
+| Grafana metrics and Tempo traces | Live operational aggregates, service topology and asynchronous continuity | Modular LGTM proof below |
+| Replay viewer | Offline semantic playback with item and interaction details | Replay capture below |
+| Split-host export proof | Positive metrics and spans from coordinator, worker and runtime over SQS and Kafka | `scripts/system-test-suite.sh observability` |
 
-The script uses the health endpoints (`/q/health`) of each service to determine when they are ready, rather than waiting a fixed amount of time.
+Framework instrumentation, build-time signal capability and deployment exporter configuration
+all matter. Enabling a runtime policy cannot add a capability excluded from the binary.
+Verify delivery through exporter logs and backend data.
 
-## Replay Viewer
-
-To generate replay JSON for the supported TPF replay viewer:
+Ordinary self-hosted HA runs keep telemetry disabled by default. The opt-in proof enables it and
+also checks that disabling only the worker SDK is detected even when payment processing succeeds:
 
 ```bash
-cd <repo-root>
-./build-modular-telemetry-images.sh
-./mvnw -f pom.xml -pl orchestrator-svc -am \
-  -Dcsv.e2e.telemetry.enabled=true \
-  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  verify -Dmaven.repo.local="$PWD/.m2/repository"
+bash scripts/system-test-suite.sh observability
 ```
 
-The replay artifact is written to:
+### Dashboards
 
-- `orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
+The LGTM stack provisions two dashboards from the orchestrator's
+[META-INF/grafana resources](orchestrator-svc/src/main/resources/META-INF/grafana):
 
-For a smaller first pass, use the 1k input:
+- `grafana-dashboard-csv-payments.json`: the eight-stage journey, step flow, pressure, Await,
+  object I/O, SLO and JVM panels.
+- `grafana-dashboard-csv-payments-tempo.json`: TraceQL journey and continuity panels, including
+  rootless/unlinked Await diagnostics.
 
-```bash
-cd <repo-root>
-./mvnw -f pom.xml -pl orchestrator-svc -am \
-  -Dcsv.e2e.telemetry.enabled=true \
-   -Dquarkus.otel.traces.sampler.arg=1 \
-   -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
-   -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
-   -Dcsv.e2e.pipeline.wait.seconds=1800 \
-  -Dcsv.e2e.orchestrator.wait.seconds=1800 \
-  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  verify -Dmaven.repo.local="$PWD/.m2/repository"
-```
+The [CSV telemetry contract](orchestrator-svc/src/test/java/org/pipelineframework/csv/orchestrator/service/CsvPaymentsTelemetryDashboardContractTest.java)
+checks the dashboard's metric queries.
 
-Open the supported replay viewer at `/replay-viewer/` and either:
+### Tempo / LGTM Verification
 
-- select `CSV Payments built-in` from the viewer sidebar, or
-- switch the sidebar selector to `Custom replay` and load the generated JSON locally
-
-The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer. Its capture must retain the deterministic 907/93 approved/unapproved split, so keep the explicit `provider-reject-probability` setting when refreshing it.
-
-For the unified runtime demo suite, use these capture profiles.
-
-### Demo capture profiles
-
-Build the modular telemetry images before recording any profile:
+Build observability-capable modular images, then run the dedicated backend proof:
 
 ```bash
-cd <repo-root>
-./build-modular-telemetry-images.sh
-```
-
-Baseline typed runtime flow:
-
-```bash
-./mvnw -f pom.xml -pl orchestrator-svc -am \
-  -Dcsv.e2e.telemetry.enabled=true \
-  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
-  -Dcsv-payments.payment-provider.permits-per-second=250 \
-  -Dcsv-payments.payment-provider.timeout-millis=5000 \
-  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test
-```
-
-Await/Kafka/provider close-up:
-
-```bash
-./mvnw -f pom.xml -pl orchestrator-svc -am \
-  -Dcsv.e2e.telemetry.enabled=true \
-  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_12.csv \
-  -Dcsv-payments.payment-provider.permits-per-second=25 \
-  -Dcsv-payments.payment-provider.timeout-millis=5000 \
-  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test
-```
-
-Provider-reject failure handling:
-
-```bash
-./mvnw -f pom.xml -pl orchestrator-svc -am \
-  -Dcsv.e2e.telemetry.enabled=true \
-  -Dcsv.e2e.telemetry.happy-path-only=false \
-  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
-  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
-  -Dtest=CsvPaymentsProviderRejectEndToEndIT \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test
-```
-
-Each profile writes the merged replay artifact to:
-
-- `orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
-
-Copy that file to a scenario-specific local capture name before running the next profile.
-
-## Tempo / LGTM Verification
-
-Replay export and live Tempo verification are separate lanes.
-
-The dedicated modular LGTM lane is the CSV telemetry proof profile. It builds telemetry-capable
-modular services, enables the TPF metrics and tracing policy, sends traces to the test stack's OTLP
-collector, and exposes the metrics dashboard through its Prometheus datasource. The self-host HA
-reference is intentionally telemetry-disabled for this proof; use it as a negative configuration
-contract, not as a Grafana or Tempo data source.
-
-The provisioned dashboard resources are:
-
-- `orchestrator-svc/src/main/resources/META-INF/grafana/grafana-dashboard-csv-payments.json`:
-  the operator dashboard, whose first row is the eight-stage journey proof;
-- `orchestrator-svc/src/main/resources/META-INF/grafana/grafana-dashboard-csv-payments-tempo.json`:
-  executable TraceQL journey panels and the rootless/unlinked Await diagnostic.
-
-To run the dedicated modular Tempo/LGTM verification path:
-
-```bash
-cd <repo-root>
 ./build-modular-observability-images.sh
 ./mvnw -f pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
@@ -235,17 +473,16 @@ cd <repo-root>
   verify -Dmaven.repo.local="$PWD/.m2/repository"
 ```
 
-That lane starts a dedicated LGTM stack, provisions both dashboards, and queries Tempo directly
-to prove that traces arrived and are queryable. It is the fast semantic and trace-continuity
-conformance check; the 10k proof below is the workload-sized operator-dashboard check.
+The test starts LGTM, provisions the dashboards and queries Tempo directly to prove trace delivery
+and continuity. Traces reach Tempo through OTLP; Prometheus scrape cadence affects metrics panels.
 
-### 10k operator-dashboard proof
+<details>
+<summary>10k operator-dashboard proof</summary>
 
 Use the opt-in 10k proof when validating the operator dashboard under enough work to populate
 throughput, latency, pressure, Await, and publication panels:
 
 ```bash
-cd <repo-root>
 ./build-modular-observability-images.sh
 ./mvnw -f pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.tempo.enabled=true \
@@ -258,37 +495,10 @@ cd <repo-root>
 
 It submits the single `payments_10k.csv` source without pre-splitting it. The configured `paging.maxRecords: 1000` bounds source replay and transition ownership while each page remains demand-driven. The proof provisions the Grafana metrics and Tempo dashboards, verifies their marked current-series queries against Grafana's Prometheus datasource, checks exactly 10,000 stable outputs, and rejects unlinked Await completion traces. It reports observed latency and pressure but intentionally does not enforce a performance budget. The journey covers page progression, pipeline run, transition dispatch, Await interaction creation, provider dispatch, completion admission, live handoff, scalar continuation, page-part publication, and final-object composition.
 
-### Object I/O Backpressure
+</details>
 
-The default CSV Payments path uses Object Ingest and Object Publish. Object Ingest admits one source object into one user-visible queue-async execution. The coordinator opens one bounded source page at a time; the CSV parser emits rows only on downstream demand, Kafka await completions flow through a live await session when the transition is active, and Object Publish writes attempt-safe page parts through a streaming target session. After source exhaustion, Object Publish composes the parts in page order into the existing single output object. The default path does not configure the CSV reader demand pacer.
-
-The page bound counts every logical source record consumed, including a blank or rejected record; the CSV header does not count. Page checkpoints are internal to the OpenCSV provider and pin file identity, size, and modification time. A mismatch fails deterministically. Failure or cancellation reopens the same page start, while completed pages are not reread.
-
-The deprecated file-step path can still use `BlockingIteratorPacer` as a legacy fallback. It is a blocking-thread throttle, not end-to-end reactive backpressure, and should not be used as the primary CSV Payments proof path.
-
-Use provider concurrency and retry settings to shape the payment-provider portion of the demo. Use the object I/O connector settings to shape file admission and terminal object writes.
-
-Operational proof for the connector-first path comes from three surfaces:
-
-1. Grafana metrics show Object Ingest admission, await completion health, provider/request pressure, Object Publish writes, and output completeness.
-2. Tempo traces show the live service topology and step spans.
-3. Replay JSON shows the high-cardinality details: object keys, await unit ids, interaction ids, item completions, live downstream progress, durable fallback release, and published output keys.
-
-### Performance Expectations
-
-Do not read the 1k demo duration as only `record-count / permits-per-second`. The mock payment provider also has per-item processing delay, and the first few items pay cold-path costs for the packaged Quarkus app, gRPC clients, Kafka channels, persistence, telemetry export, and provider warmup.
-
-The connector-first path proves that the CSV reader demand pacer is not the mechanism keeping the run alive. Parser pace comes from reactive demand and the await in-flight window. This does not remove the provider as the bottleneck. If await dispatch exceeds provider capacity, pending interactions, broker lag, retries, timeouts, or DLQ events are the expected pressure signals. For performance comparisons, separate:
-
-1. cold first-item latency,
-2. warm first-item latency,
-3. steady-state provider permits/sec and provider processing delay,
-4. completion-to-continuation latency,
-5. terminal Object Publish close latency.
-
-Only compare full-run wall time after those components are visible in metrics, traces, or replay.
-
-For local manual inspection before teardown:
+<details>
+<summary>Pause a live proof for manual inspection</summary>
 
 ```bash
 ./mvnw -f pom.xml -pl orchestrator-svc -am \
@@ -303,494 +513,54 @@ The harness logs the Grafana UI URL and Tempo API URL before pausing. Grafana us
 mapped local port, so open the URL printed by the test rather than assuming `localhost:3000`. Use
 that mode for manual inspection only; the CI proof comes from the Tempo API assertion.
 
-## Runtime-mapping matrix (Phase 2 build/functional smoke tests)
+</details>
 
-To exercise runtime mapping scenarios from `config/runtime-mapping`:
+### Performance Expectations
 
-```bash
-./run-runtime-mapping-matrix.sh
-```
+Full-run duration includes provider processing delay and cold-path costs for Quarkus, gRPC,
+Kafka, persistence, telemetry export and provider warmup, as well as rate limiting. Parser pace
+comes from reactive demand and the Await in-flight window. Dispatch above provider capacity
+shows up as pending interactions, broker lag, retries, timeouts or DLQ events.
 
-To run the same matrix plus `CsvPaymentsEndToEndIT` for each scenario:
+For performance comparisons, measure these components separately:
 
-```bash
-./run-runtime-mapping-matrix.sh --with-e2e
-```
+1. cold first-item latency,
+2. warm first-item latency,
+3. steady-state provider permits/sec and provider processing delay,
+4. completion-to-continuation latency,
+5. terminal Object Publish close latency.
 
-This runner uses plain flags (no Maven profiles) and swaps `config/pipeline.runtime.yaml`
-per scenario before each build.
-It validates build/runtime-mapping and functional behavior; it does not assert deployment topology shape.
-Current matrix scenarios are `modular-auto`, `modular-strict`, and `pipeline-runtime`.
-`monolith` is not included yet because csv-payments still builds/runs as separate Maven modules/services.
-
-### Port Configuration
-
-The services use the following ports:
-- orchestrator-svc: 8443
-- input-csv-file-processing-svc: 8444
-- payments-processing-svc: 8445
-- payment-status-svc: 8446
-- persistence-svc: 8448
-
-All services communicate over HTTPS with self-signed certificates.
-
-### Proto Generation
-
-The gRPC protobufs are generated from `config/pipeline.yaml` by `PipelineProtoGenerator` during the `generate-sources` phase and live under `common/target/generated-sources/proto`.
-
-
-```mermaid
-graph TD
-    A[Input CSV Files] --> B[Orchestrator Service]
-    B --> C[Input CSV Processing Service]
-    B --> K[Kafka Await Request]
-    K --> D[Payments Processing Service]
-    D --> L[Kafka Await Completion]
-    L --> B
-    B --> E[Payment Status Service]
-    B --> F[Object Publish]
-    D --> G[Mock Payment Provider]
-
-    subgraph "Microservices"
-        B
-        C
-        D
-        E
-        F
-    end
-
-    subgraph "External Systems"
-        A
-        K
-        L
-        G
-    end
-
-    style B fill:#4CAF50,stroke:#388E3C
-    style C fill:#2196F3,stroke:#0D47A1
-    style D fill:#2196F3,stroke:#0D47A1
-    style E fill:#2196F3,stroke:#0D47A1
-    style F fill:#2196F3,stroke:#0D47A1
-```
-
-## Repository Structure
-
-This project consists of Maven submodules, each containing a microservice that runs independently:
-
-- [**Orchestrator Service**](./orchestrator-svc/README.md): Main entry point that coordinates the entire workflow
-- [**Input CSV File Processing Service**](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
-- [**Payments Processing Service**](./payments-processing-svc/README.md): Interacts with the mock payment provider
-- [**Payment Status Service**](./payment-status-svc/README.md): Processes payment statuses
-- [**Common Module**](./common/README.md): Shared domain models and utilities
-
-## Motivation
-
-Write a command-line client to process CSV files containing payments.
-
-Each line needs to be processed via a test provider which is an external API.
-
-This is not as simple as just invoking a single API on the provider and returning the results because the provider processes payments asynchronously, and it is your job to print the ultimate status after processing.
-
-### API Call Parameters
-
-| Field     | M   | Type    | Description                                       |
-|-----------|-----|---------|---------------------------------------------------|
-| msisdn    | M   | string  | Recipient phone number.                           |
-| amount    | M   | decimal | Amount to pay.                                    |
-| currency  | M   | string  | ISO-4217 currency code of amount.                 |
-| reference | O   | string  | Client-supplied identifier for this payment.      |
-| url       | O   | string  | URL to send callback request with payment result. |
-
-### API Response
-
-| Field          | M   | Type    | Description                              |
-|----------------|-----|---------|------------------------------------------|
-| status         | M   | decimal | Status of request. See "Status" section. |
-| message        | O   | string  | Additional information about the status. |
-| conversationID | O   | string  | Identifier for this request.             |
-
-### Processing Flow
-
-1. Get a session token.
-2. Request an action (payment, name lookup, etc.)
-3. If the action is asynchronous, await callback requests from the provider.
-   Callbacks may be enabled or disabled as needed.
-4. If the action is asynchronous and callbacks are disabled or no callback was
-   received in the expected amount of time, poll for results as needed.
-
-### Expected CSV Output Columns
-
-1. AMOUNT
-2. CSV ID
-3. CURRENCY
-4. FEE
-5. MESSAGE
-6. RECIPIENT
-7. REFERENCE
-8. STATUS
-
-## Data Flow
-
-The CSV Payments Processing Application follows a complex end-to-end data flow that handles asynchronous payment processing:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Orchestrator
-    participant ObjectIngest
-    participant InputService
-    participant AwaitUnit
-    participant Kafka
-    participant StatusService
-    participant ObjectPublish
-    participant PaymentProvider
-
-    User->>Orchestrator: Start processing
-    Orchestrator->>ObjectIngest: Poll object source
-    ObjectIngest-->>Orchestrator: Admit source object execution
-    Orchestrator->>InputService: Process CSV file
-    InputService-->>Orchestrator: Stream payment records
-    loop For each payment record
-        Orchestrator->>AwaitUnit: Create item interaction
-        AwaitUnit->>Kafka: Publish await request
-        Kafka->>PaymentProvider: Deliver payment request
-        PaymentProvider-->>Kafka: PaymentStatus
-        Kafka-->>AwaitUnit: Admit completion
-        AwaitUnit-->>Orchestrator: Release item continuation
-        Orchestrator->>StatusService: Process status
-        StatusService-->>Orchestrator: PaymentOutput
-    end
-    Orchestrator->>ObjectPublish: Stream terminal output
-    ObjectPublish-->>Orchestrator: Published object result
-    Orchestrator->>User: Processing complete
-```
-
-### Detailed Processing Steps
-
-1. **Input Processing**: Object Ingest admits CSV files from the configured source, then the Input CSV File Processing Service parses each admitted file.
-
-2. **Payment Record Extraction**: Each input file is processed, extracting individual payment records as a stream.
-
-3. **Deferred Provider Completion**: Each payment record is emitted by the authored provider-request operation and dispatched to the Kafka-backed mock provider through its `await:` modifier.
-
-4. **Provider Completion**: The provider returns one `PaymentStatus` completion per payment record.
-
-5. **Status Processing**: Final payment statuses are processed by the Payment Status Service to generate standardized output records.
-
-6. **Output Generation**: Object Publish streams terminal payment output records into grouped CSV output files.
-
-7. **Completion**: The Orchestrator Service coordinates the entire workflow and provides console output for debugging purposes.
-
-## Technology Stack
-
-- **Quarkus**: Kubernetes-native Java framework
-- **gRPC**: High-performance RPC communication
-- **Mutiny**: Reactive programming library
-- **Virtual Threads**: Project Loom for efficient concurrency
-- **Maven**: Build automation tool
-- **JUnit 5**: Testing framework
-- **Mockito**: Mocking framework
-- **Lombok**: Boilerplate code reduction
-- **MapStruct**: Java bean mappings
-- **OpenCSV**: CSV processing library
-
-## Observability Stack
-
-- **Micrometer**: Application metrics collection integrated with Quarkus
-- **OpenTelemetry**: Distributed tracing and metrics collection
-- **Prometheus**: Metrics storage and querying
-- **Grafana**: Metrics visualization and dashboarding
-- **Tempo**: Distributed tracing backend
-- **Loki**: Log aggregation system
-
-## Mock Payment Provider Simulation
-
-The csv-payments example includes a deterministic mock payment provider. In addition to the
-existing rate-limit timeout behavior, you can now force specific outcomes in modular E2E runs
-by setting Quarkus config properties:
-
-- `csv-payments.payment-provider.provider-timeout-probability`
-- `csv-payments.payment-provider.provider-reject-probability`
-
-Each value is a probability between `0.0` and `1.0`. The mock applies the decision
-deterministically from stable payment-record identifiers, so the same replay input
-produces the same timeout or reject pattern.
-
-Example:
-
-```bash
-./mvnw -f pom.xml -pl orchestrator-svc -am \
-  -Dcsv.e2e.telemetry.enabled=true \
-  -Dcsv-payments.payment-provider.provider-timeout-probability=0.05 \
-  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
-  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
-  -Dsurefire.failIfNoSpecifiedTests=false \
-  test
-```
-
-`provider-reject-probability` now returns the `UnapprovedPaymentStatus` branch of the
-`PaymentStatus` union. The default object-publish pipeline routes that branch through
-`Process Unapproved Payment Status` and the explicit terminal merge step `Finalize Payment Output`,
-so rejected provider responses still produce normal `PaymentOutput` rows with the rejection text.
-Technical timeouts still surface as exceptions and therefore participate in the normal retry path.
-Malformed CSV handling is separate: today malformed input fails at file scope rather than as a
-per-record reject.
-
-The object publish sink does not imply the branch merge. The branch-aware proof in
-`config/pipeline.yaml` keeps `terminal: true` on `Finalize Payment Output`, then publishes the
-merged `PaymentOutput` rows through Object Publish.
-
-## Getting Started
-
-### Prerequisites
-
-- Java 21
-- Maven 3.6+
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/mbarcia/CSV-Payments-PoC.git
-   ```
-
-2. Navigate to the project directory:
-   ```bash
-   cd CSV-Payments-PoC
-   ```
-
-### Building the Application
-
-```bash
-./mvnw -f pom.xml clean package
-```
-
-### Build Targets
-
-#### Modular build (default)
-
-```bash
-./mvnw -f pom.xml clean package
-```
-
-#### Monolith build target
-
-```bash
-./build-monolith.sh
-```
-
-`build-monolith.sh` applies the monolith runtime mapping and selects the monolith modules from the canonical root reactor,
-sets `-Dtpf.build.transport=LOCAL` for the build, and restores the previous `config/pipeline.runtime.yaml` afterwards.
-The build-time switch `-Dtpf.build.transport=LOCAL` controls code generation only (annotation processor option);
-it does not affect runtime behavior. The generated monolith artifact already contains `LocalClientStep` classes,
-so no additional runtime flag is needed.
-
-Note: the end-to-end test lives under `orchestrator-svc`, but in monolith mode it launches the
-`monolith-svc` runnable JAR. The `orchestrator-svc` module is the test harness; the monolith runtime
-is in `monolith-svc`.
-
-### Running the Application
-
-#### Development Mode
-
-To run the application in development mode with hot reloading, install IntelliJ IDEA and use its Quarkus plugin.
-
-#### Running as JAR Files
-
-Each service can be run as a standalone JAR:
-
-```bash
-# Start the services (excluding orchestrator-svc which is a CLI application)
-# Build all services first
-mvn clean package
-
-# Start each service in a separate terminal
-java -jar input-csv-file-processing-svc/target/input-csv-file-processing-svc-1.0.jar
-java -jar payments-processing-svc/target/payments-processing-svc-1.0.jar
-java -jar payment-status-svc/target/payment-status-svc-1.0.jar
-
-# Run the orchestrator-svc as a CLI application (after all services are up)
-java -jar orchestrator-svc/target/orchestrator-svc-1.0.jar --ingest-once
-
-# Note: You'll need to stop each service manually in each terminal
-```
-
-#### Running in Native Mode
-
-The native CI workflow builds the four runnable services independently. To
-build the same executables locally with Docker available:
-
-```bash
-for service in orchestrator-svc input-csv-file-processing-svc payments-processing-svc payment-status-svc; do
-  native_args=--enable-preview
-  if [ "$service" = input-csv-file-processing-svc ]; then
-    native_args=--enable-preview,--initialize-at-run-time=org.apache.commons.logging.impl.Log4jApiLogFactory
-  fi
-  ./mvnw -B -f pom.xml -pl "$service" -am -DskipTests \
-    -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true \
-    -Dquarkus.native.container-build=true \
-    "-Dquarkus.native.additional-build-args=$native_args" \
-    -Dmaven.repo.local="$PWD/.m2/repository" package
-done
-
-# Start each service in a separate terminal
-./input-csv-file-processing-svc/target/*-runner
-./payments-processing-svc/target/*-runner
-./payment-status-svc/target/*-runner
-
-# Run the orchestrator-svc as a CLI application (after all services are up)
-./orchestrator-svc/target/*-runner --ingest-once
-
-# Note: You'll need to stop each service manually in each terminal
-```
-
-### Configuration
-
-The application uses environment variables for configuration:
-
-- `CSV_FOLDER_PATH`: Path to the folder containing CSV files (default: "csv/")
-- `PROCESS_CSV_PAYMENTS_INPUT_FILE_SVC_HOST`: Input service host (default: "localhost")
-- `PROCESS_CSV_PAYMENTS_INPUT_FILE_SVC_PORT`: Input service port (default: 8081)
-- `SEND_PAYMENT_RECORD_SVC_HOST`: Payments service host (default: "localhost")
-- `SEND_PAYMENT_RECORD_SVC_PORT`: Payments service port (default: 8082)
-- And more for each service...
-
-See [application.properties](./orchestrator-svc/src/main/resources/application.properties) for complete configuration options.
-
-- `QUARKUS_DATASOURCE_DEVSERVICES_DB_NAME`: Name of the database to create (default: quarkus)
-- `QUARKUS_DATASOURCE_DEVSERVICES_USERNAME`: Username for the database (default: quarkus)
-- `QUARKUS_DATASOURCE_DEVSERVICES_PASSWORD`: Password for the database (default: quarkus)
-
-### Testing
-
-To run the tests, execute:
-
-```bash
-mvn test
-```
-
-To run tests with code coverage:
-
-```bash
-mvn clean test jacoco:report
-```
-
-#### End-to-End Integration Testing
-
-To run an end-to-end integration test that starts all services and processes a real CSV file:
-
-```bash
-./run-e2e-test.sh
-```
-
-This script will start all microservices, process a sample CSV file, and verify the results. See [pipelineframework.org](https://pipelineframework.org/) for more details.
-
-## SSL Certificate Handling in Development
-
-When running the services with HTTPS enabled, self-signed certificates are used for development purposes. To avoid browser security warnings, you need to add these certificates to your system's trusted certificate store.
-
-### Trusting the Development Certificate
-
-The build generates a self-signed certificate under `target/dev-certs`. You can trust it by exporting from a running service:
-
-1. **Add the existing certificate to your macOS keychain**:
-   ```bash
-   # Start one of the services first (e.g., in a separate terminal):
-   # cd input-csv-file-processing-svc && mvn quarkus:dev
-
-   # Export the certificate from the running service
-   echo | openssl s_client -connect localhost:8444 2>/dev/null | openssl x509 > /tmp/quarkus-cert.pem
-
-   # Add to user keychain
-   security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db /tmp/quarkus-cert.pem
- ```
-
-2. **Restart your browser** to ensure it picks up the new trusted certificate.
-
-3. **Restart all services**:
-   ```bash
-   # In separate terminals, start each service:
-   # Terminal 1:
-   cd input-csv-file-processing-svc && mvn quarkus:dev
-
-   # Terminal 2:
-   cd payments-processing-svc && mvn quarkus:dev
-
-   # Terminal 3:
-   cd payment-status-svc && mvn quarkus:dev
-
-   ```
-
-### Troubleshooting Certificate Issues
-
-If you encounter certificate errors:
-
-1. **ERR_CERT_AUTHORITY_INVALID**: The certificate is not trusted by your system. Follow the steps above to add it to your keychain.
-
-2. **ERR_CERT_COMMON_NAME_INVALID**: The certificate doesn't include the correct Subject Alternative Names. Regenerate the certificate using the steps above.
-
-3. **Certificate not updating**: Ensure all services are stopped before regenerating certificates, and restart them afterward.
-
-The certificate is intended for development use only and should never be used in production environments.
-
-If you need to regenerate the Docker certificates manually, you can use the `generate-dev-certs.sh` script:
-
-```bash
-./generate-dev-certs.sh
-```
-
-## Observability
-
-The CSV Payments Processing Application includes a comprehensive observability stack to monitor and visualize the performance of the microservices pipeline. This stack helps demonstrate the importance of backpressure, retry with back-off, and lazy evaluation in a distributed system.
-
-### Components
-
-- **Micrometer**: Integrated with Quarkus to collect application-level metrics such as throughput, latency, and JVM statistics
-- **OpenTelemetry**: Provides distributed tracing and metrics collection across all services
-- **Prometheus**: Scrapes and stores metrics from all services for querying and alerting
-- **Grafana**: Visualizes metrics and provides dashboards for real-time monitoring
-- **Tempo**: Stores and queries distributed traces for end-to-end request tracking
-- **Loki**: Aggregates and stores logs from all services
+Only compare full-run wall time after those components are visible in metrics, traces, or replay.
 
 ### Running with Observability
-Quarkus LGTM Dev Services are explicit opt-in. Enable them before starting a service in dev mode:
+
+Quarkus LGTM Dev Services and Prometheus export are opt-in during development:
 
 ```bash
 export QUARKUS_OBSERVABILITY_LGTM_ENABLED=true
 export QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
 ```
 
-This gives you the live Prometheus/Grafana/Tempo stack in dev mode when the application was built
-with the corresponding telemetry capability and its `pipeline.telemetry.*` policy enables the
-signal. It does not make a telemetry-disabled binary emit data. The replay-enabled E2E harness is
-separate and produces offline replay artifacts, and the Tempo verification lane is separate again
-and proves live trace visibility against a dedicated LGTM stack.
+Enable the desired framework policies in the host configuration as well:
 
-The telemetry harness launches the packaged orchestrator application. If the packaged `target/quarkus-app/quarkus-run.jar` is stale or missing, the test bootstrap rebuilds it automatically before the run starts.
+```properties
+pipeline.telemetry.enabled=true
+pipeline.telemetry.metrics.enabled=true
+pipeline.telemetry.tracing.enabled=true
+```
 
-### Dashboards
-
-The application ships separate observability surfaces:
-
-1. **Grafana metrics dashboard** (`grafana-dashboard-csv-payments.json`): the operator surface.
-   Its first row proves the semantic journey, followed by step flow, pressure, Await health,
-   ingest/publication, and SLO/JVM sections.
-2. **Tempo tracing dashboard** (`grafana-dashboard-csv-payments-tempo.json`): executable TraceQL
-   journey and continuity panels, including the rootless/unlinked Await diagnostic.
-3. **Replay viewer**: deterministic playback from `csv-payments-replay.json`
-
-Dashboards are discovered from `META-INF/grafana/grafana-dashboard-*.json` resources when LGTM Dev Services are active.
+These settings require a telemetry-capable build. For packaged proof runs, use the image helpers
+and tests above. The harness rebuilds a missing or stale packaged orchestrator before launch.
 
 ### Connector-First Metrics
 
-The connector-first path is healthy when:
+A healthy run admits the expected objects, accepts provider completions, advances downstream
+status processing and publishes the expected terminal item count. Object Publish failures and
+Await dropped completions stay zero outside intentional duplicate/retry checks. Early-held
+completions and resume releases describe durable fallback.
 
-1. Object Ingest listed and submitted the expected source object count.
-2. Await completions are admitted and downstream status/publish progress follows accepted completions; early-held completions and resume releases are durable fallback signals.
-3. Object Publish grouped the same terminal item count the run produced and published the expected `.out` object.
-4. Object Publish failures and await dropped completions remain zero outside intentional duplicate/retry tests.
-
-The relevant TPF metrics are:
+<details>
+<summary>Metric names for admission, Await and publication</summary>
 
 - `tpf.object_ingest.listed.objects.total`
 - `tpf.object_ingest.submitted.total`
@@ -814,62 +584,112 @@ The relevant TPF metrics are:
 
 Object keys, await unit ids, interaction ids, and execution ids are intentionally visible in replay and traces, not metric labels.
 
-### Distributed Tracing
+</details>
 
-OpenTelemetry provides distributed tracing capabilities that allow you to:
+When Prometheus export is enabled, hosts expose `/q/metrics` on their configured HTTP/HTTPS
+interface. Use the [port table](#port-configuration) or the active Compose mappings instead of
+assuming ports are shared between layouts.
 
-1. Follow a request as it flows through multiple services
-2. Identify bottlenecks and performance issues
-3. Understand the impact of retry mechanisms
-4. Visualize the lazy evaluation of streams across services
+### Replay Viewer
 
-Live traces are pushed to Tempo in real time through OTLP exporters. Prometheus scrape cadence only affects metrics panels.
+Capture replay JSON from the modular telemetry images:
 
-### Accessing Metrics Endpoints
+```bash
+./build-modular-telemetry-images.sh
+./mvnw -f pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-Each service exposes a `/q/metrics` endpoint that provides Prometheus-formatted metrics:
+The merged artifact is `orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`.
+Open the supported [replay viewer](https://pipelineframework.org/replay-viewer/) and select
+**CSV Payments built-in**, or choose **Custom replay** and load your generated JSON.
 
-- Input CSV File Processing Service: http://localhost:8081/q/metrics
-- Payments Processing Service: http://localhost:8082/q/metrics
-- Payment Status Service: http://localhost:8083/q/metrics
-- Data Persistence Service: http://localhost:8085/q/metrics
+The built-in dataset comes from the 1k capture and retains a deterministic 907/93 approved/unapproved
+split. Keep `provider-reject-probability=0.08` when refreshing it. Copy each capture to a separate
+local filename before running another profile.
 
-## Related Services
+<details>
+<summary>Replay capture profiles: 1k, provider close-up and rejection</summary>
 
-- [Orchestrator Service](./orchestrator-svc/README.md): Main coordination service
-- [Input CSV File Processing Service](./input-csv-file-processing-svc/README.md): Reads and parses input CSV files
-- [Payments Processing Service](./payments-processing-svc/README.md): Interacts with the mock payment provider
-- [Payment Status Service](./payment-status-svc/README.md): Processes payment statuses
-- [Common Module](./common/README.md): Shared domain models and utilities
+Build the modular telemetry images before recording a profile:
 
-## Documentation
+```bash
+./build-modular-telemetry-images.sh
+```
 
-Comprehensive documentation for the Pipeline Framework is available at our [documentation site](https://pipelineframework.org). The documentation site includes:
+Capture the 1k input with the built-in dataset's rejection probability:
 
-- Detailed guides on using the framework
-- API references for annotations and interfaces
-- Examples and best practices
-- Deployment instructions
+```bash
+./mvnw -f pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dquarkus.otel.traces.sampler.arg=1 \
+  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+  -Dcsv.e2e.pipeline.wait.seconds=1800 \
+  -Dcsv.e2e.orchestrator.wait.seconds=1800 \
+  -Dit.test=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  verify -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-The documentation source is located in the `docs` directory and is built using VitePress. For information on how to
-contribute to the documentation or run it locally, see [docs/README.md](../../docs/README.md).
+Baseline typed runtime flow:
 
-## Contributing
+```bash
+./mvnw -f pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv-payments.payment-provider.permits-per-second=250 \
+  -Dcsv-payments.payment-provider.timeout-millis=5000 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a pull request
+Await/Kafka/provider close-up:
 
-## License
+```bash
+./mvnw -f pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_12.csv \
+  -Dcsv-payments.payment-provider.permits-per-second=25 \
+  -Dcsv-payments.payment-provider.timeout-millis=5000 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](../../LICENSE) file for details.
+Provider-reject failure handling:
 
+```bash
+./mvnw -f pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv.e2e.telemetry.happy-path-only=false \
+  -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+  -Dtest=CsvPaymentsProviderRejectEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test -Dmaven.repo.local="$PWD/.m2/repository"
+```
 
-## Produce a monolith Release
+Each profile writes the merged replay artifact to:
 
-The existing monolith build can produce a closed application Release: one ZIP contains the complete Quarkus fast-JAR,
+- `orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
+
+Copy that file to a scenario-specific local capture name before running the next profile.
+
+</details>
+
+## Release Production
+
+Release descriptors pin the complete application archives and compiled metadata. Kafka,
+PostgreSQL and other external services remain deployment prerequisites. The TPF CLI verifies
+or deploys an existing Release using external resolver and deployment configuration.
+Install the [TPF CLI](https://pipelineframework.org/deploy/deployment-cli) for the `tpf` commands below.
+
+### Produce a monolith Release
+
+The monolith build can produce a closed application Release: one ZIP contains the complete Quarkus fast-JAR,
 its runtime dependencies and compiler-produced `META-INF/pipeline/` metadata. Ordinary verification skips release
 production. Enable it explicitly and supply an immutable Release version:
 
@@ -886,6 +706,9 @@ Kafka, PostgreSQL and other external services remain deployment prerequisites.
 
 Keep the descriptor and ZIP together. If a rebuild changes the packaged bytes, choose a new Release version;
 the producer rejects replacement of an existing immutable Release identity.
+
+<details>
+<summary>Publish a promotable monolith Release to Maven</summary>
 
 For a promotable Maven Release, first give the application reactor a non-SNAPSHOT version, for example `1.0.0`.
 Configure your standard Maven artefact repository and credentials, and publish the parent POM before the module build:
@@ -906,8 +729,9 @@ The monolith and modular layouts have separate descriptors. The pipeline-runtime
 See [Release production](https://pipelineframework.org/deploy/release-descriptors) and
 [CLI deployment](https://pipelineframework.org/deploy/deployment-cli).
 
+</details>
 
-## Produce a modular Release
+### Produce a modular Release
 
 The modular Release contains five complete fast-JAR ZIPs: input processing, payment status, the external payment-provider
 simulator, persistence, and the orchestrator. Input processing owns `ProcessCsvPaymentsInput`; payment status owns the
@@ -915,8 +739,7 @@ approved, unapproved, and final-output steps. The orchestrator carries the compl
 and persistence hosts are included even though they own no authored Pipeline steps. Kafka and PostgreSQL remain
 external deployment prerequisites.
 
-Build the modular packages once with the existing modular build command. Then produce the Release using the existing
-outputs, without repeating compilation or packaging:
+Build the modular images, then produce the Release from those packages:
 
 ```sh
 ./build-modular-telemetry-images.sh
@@ -937,5 +760,29 @@ its host name as classifier. For standard Maven publication, use a non-SNAPSHOT 
 and run standard Maven `deploy` with `-Dtpf.release.skip=false -Dtpf.release.version=1.0.0 -Dmaven.deploy.skip=false` and
 the repository-local Maven cache. The producer is bound to `verify`; Maven does not select a deployment target.
 
-CI produces and verifies this complete Release after both existing modular E2E builds: provider rejection and Tempo.
+CI produces and verifies this complete Release after both modular E2E builds: provider rejection and Tempo.
 It checks every packaged file against the build output and verifies that each authored step is owned exactly once.
+
+## Documentation
+
+- [The Pipeline Framework documentation](https://pipelineframework.org/): framework concepts,
+  authoring, deployment and operations.
+- [Self-hosted HA reference](self-host/container/README.md): local stack, durable coordinator,
+  admission profiles and split-host observability.
+- [Orchestrator service](orchestrator-svc/README.md): application entry points and E2E harness.
+- [Release production](https://pipelineframework.org/deploy/release-descriptors) and
+  [CLI deployment](https://pipelineframework.org/deploy/deployment-cli): immutable application delivery.
+
+Framework documentation lives in the
+[pipelineframework repository](https://github.com/The-Pipeline-Framework/pipelineframework/tree/main/docs).
+This repository owns the application and its service READMEs.
+
+## Contributing
+
+Create a branch or fork, make the change, run the relevant checks and open a pull request.
+[AGENTS.md](AGENTS.md) describes application ownership, the isolated Maven cache and cross-repository
+compatibility validation. Changes to TPF semantics belong in their owning framework repositories.
+
+## License
+
+[Apache License 2.0](LICENSE).
