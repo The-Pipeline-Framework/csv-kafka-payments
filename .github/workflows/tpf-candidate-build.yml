@@ -32,6 +32,8 @@ jobs:
           cache-path: ${{ github.workspace }}/.m2/repository
       - name: Check application dependency contract
         run: python3 scripts/test-application-dependencies.py
+      - name: Check HA failure diagnostics
+        run: python3 -m unittest -v self-host/container/test_ha_diagnostics.py
       - name: Run owner CI-equivalent Maven lifecycle once
         run: ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
       - name: Check release step identities

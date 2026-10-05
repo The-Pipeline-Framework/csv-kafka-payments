@@ -48,7 +48,7 @@ jobs:
           cache: maven
 
       - name: Validate CSV HA fixture helpers
-        run: python3 -m unittest -v self-host/container/test_demo_client.py
+        run: python3 -m unittest -v self-host/container/test_demo_client.py self-host/container/test_ha_diagnostics.py
 
       - name: Setup Docker environment
         uses: ./.github/actions/setup-testcontainers
@@ -117,13 +117,8 @@ jobs:
           TPF_REPO_ROOT: ${{ github.workspace }}
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
         run: |
-          compose_files=(-f self-host/container/compose.yaml)
-          if [[ "${TPF_CSV_AWAIT_TRANSPORT}" == "kafka" ]]; then
-            compose_files+=(-f self-host/container/compose.kafka.yaml)
-          fi
-          docker compose "${compose_files[@]}" ps || true
-          docker compose "${compose_files[@]}" logs --no-color --tail=500 || true
-          docker compose "${compose_files[@]}" down -v --remove-orphans || true
+          # The ephemeral runner owns teardown; do not re-render Compose to collect logs.
+          bash self-host/container/collect-ha-diagnostics.sh || true
 
       - name: Make CSV self-host scale failure artifacts readable
         if: failure()
