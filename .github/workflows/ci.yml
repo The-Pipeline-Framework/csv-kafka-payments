@@ -32,6 +32,9 @@ jobs:
           cache: maven
           cache-path: ${{ github.workspace }}/.m2/repository
 
+      - name: Check framework provenance version resolution
+        run: python3 scripts/test-framework-version.py
+
       - name: Compile and run unit tests
         run: ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
 
