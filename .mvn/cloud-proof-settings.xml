@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <servers>
+    <server>
+      <id>cloud-proof-packages</id>
+      <username>${env.TPF_PROOF_PACKAGES_USERNAME}</username>
+      <password>${env.TPF_PROOF_PACKAGES_TOKEN}</password>
+    </server>
+  </servers>
+  <profiles>
+    <profile>
+      <id>cloud-proof-resolution</id>
+      <repositories>
+        <repository>
+          <id>cloud-proof-packages</id>
+          <url>https://maven.pkg.github.com/The-Pipeline-Framework/csv-kafka-payments</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+      </repositories>
+    </profile>
+  </profiles>
+  <activeProfiles><activeProfile>cloud-proof-resolution</activeProfile></activeProfiles>
+</settings>

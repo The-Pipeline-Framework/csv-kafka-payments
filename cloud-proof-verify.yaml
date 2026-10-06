@@ -1,0 +1,37 @@
+resolverProfiles:
+  published:
+    file: false
+    maven:
+      settings: ${TPF_PROOF_ROOT}/.mvn/cloud-proof-settings.xml
+      localRepository: ${TPF_PROOF_ROOT}/.m2/proof-remote-resolution
+environments:
+  proof-human-development:
+    resolverProfile: published
+    target:
+      type: tpf-cloud
+      endpoint: http://localhost:8081
+      organization: 5245b6bda864febd1357a3f263375e5b6956ea8f9c53060a3244124b148e9892
+      application: csv-kafka-payments
+      environment: development
+      mode: CUSTOMER_MANAGED
+      credential: oauth-session:proof-human
+  proof-development:
+    resolverProfile: published
+    target:
+      type: tpf-cloud
+      endpoint: http://localhost:8081
+      organization: 5245b6bda864febd1357a3f263375e5b6956ea8f9c53060a3244124b148e9892
+      application: csv-kafka-payments
+      environment: development
+      mode: CUSTOMER_MANAGED
+      credential: proof
+  proof-staging:
+    resolverProfile: published
+    target:
+      type: tpf-cloud
+      endpoint: http://localhost:8081
+      organization: 5245b6bda864febd1357a3f263375e5b6956ea8f9c53060a3244124b148e9892
+      application: csv-kafka-payments
+      environment: staging
+      mode: CUSTOMER_MANAGED
+      credential: proof

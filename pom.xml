@@ -21,7 +21,7 @@
 
     <groupId>org.pipelineframework.csv</groupId>
     <artifactId>csv-payments-parent</artifactId>
-    <version>26.9.4-SNAPSHOT</version>
+    <version>0.0.0-cloud-proof-20261006</version>
     <packaging>pom</packaging>
     <name>CSV Kafka Payments</name>
     <description>A production-grade payment processing application built with The Pipeline Framework and Kafka</description>
