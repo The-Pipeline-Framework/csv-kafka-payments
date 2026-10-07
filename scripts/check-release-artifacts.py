@@ -2,6 +2,7 @@
 """Check a locally produced Release against its complete Quarkus fast-JAR output."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import sys
 from urllib.parse import unquote, urlparse
@@ -38,8 +39,17 @@ for module in sys.argv[1:]:
             source_target = Path(module).parent / artifact_id / "target"
         require(artifact["kind"] == "application-archive", artifact)
         uri = urlparse(artifact["uri"])
-        require(uri.scheme == "file" and not uri.netloc, artifact)
-        archive = Path(unquote(uri.path))
+        if uri.scheme == "file":
+            require(not uri.netloc, artifact)
+            archive = Path(unquote(uri.path))
+        elif uri.scheme == "maven":
+            # Check producer output bytes without rewriting the promotable descriptor.
+            # Remote URI resolution remains the public CLI's separate proof.
+            artifact_id = artifact.get("artifactId", "")
+            require(bool(re.fullmatch(r"[A-Za-z0-9_-]+", artifact_id)), "unsafe archive identity")
+            archive = target / "pipeline-release-artifacts" / (artifact_id + ".zip")
+        else:
+            require(False, "unsupported local archive check URI scheme")
         require(archive.is_file(), f"archive missing: {archive}")
         digest = "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest()
         require(digest == artifact["digest"], f"digest {digest} != {artifact['digest']}")
