@@ -54,4 +54,4 @@ jobs:
         run: python3 scripts/test-release-step-identities.py
 
       - name: Check release verifier
-        run: python3 scripts/test_release_artifacts.py
+        run: python3 -m unittest discover -s scripts -p 'test_*release*.py'
