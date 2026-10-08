@@ -20,6 +20,23 @@ class HaScalePolicyTest(unittest.TestCase):
         self.assertIn('TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS:-300',
                       (ROOT / "self-host/container/run-container-ha-demo.sh").read_text())
 
+    def test_localstack_bootstrap_provisions_await_continuation_indexes(self):
+        bootstrap = (ROOT / "self-host/container/bootstrap-localstack.sh").read_text()
+        for index, hash_key, range_key in (
+            ("await-interaction-continuation-work", "query_continuation_key", "query_continuation_due_epoch_ms"),
+            ("await-interaction-by-execution", "query_execution_key", "query_execution_sort"),
+        ):
+            definition = next(line for line in bootstrap.splitlines() if f"IndexName={index}," in line)
+            self.assertIn(f"AttributeName={hash_key},KeyType=HASH", definition)
+            self.assertIn(f"AttributeName={range_key},KeyType=RANGE", definition)
+            self.assertIn(f"AttributeName={hash_key},AttributeType=S", bootstrap)
+            self.assertIn(f"AttributeName={range_key},AttributeType={'N' if range_key.endswith('_ms') else 'S'}", bootstrap)
+        self.assertIn("wait_for_await_interaction_indexes", bootstrap)
+        self.assertIn("ensure_await_interaction_index", bootstrap)
+        self.assertIn("dynamodb update-table", bootstrap)
+        self.assertIn("IndexStatus=='ACTIVE'", bootstrap)
+        self.assertIn("--output text | tr", bootstrap)
+
 
 if __name__ == "__main__":
     unittest.main()
