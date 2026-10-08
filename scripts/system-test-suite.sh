@@ -2,33 +2,55 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-suite=${1:?usage: system-test-suite.sh smoke|ha|ha-scale|observability|native}
+suite=${1:?usage: system-test-suite.sh smoke|ha|ha-scale|provider-reject|observability|native}
 read -r -a maven_args <<< "${MAVEN_ARGS:-}" || true
 cd "$repo_root"
+
+configure_testcontainers() {
+  export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
+  if ! docker info >/dev/null 2>&1; then sudo systemctl start docker || true; fi
+  for attempt in {1..10}; do
+    docker info >/dev/null 2>&1 && break
+    sleep 3
+  done
+  export DOCKER_API_VERSION="$(docker version --format '{{.Server.APIVersion}}')"
+  [[ -n "$DOCKER_API_VERSION" ]] || { echo "Docker server API version is unavailable" >&2; return 1; }
+  export TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy
+  export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+  export TPF_CI_QUIET="${TPF_CI_QUIET:-true}"
+  cat > "$HOME/.testcontainers.properties" <<EOF
+docker.client.strategy=$TESTCONTAINERS_DOCKER_CLIENT_STRATEGY
+docker.host=$DOCKER_HOST
+EOF
+  mkdir -p "$HOME/.cache/google-cloud-tools-java/jib"
+}
 
 case "$suite" in
   smoke)
     ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress "${maven_args[@]}"
     ;;
+  provider-reject)
+    configure_testcontainers
+    export MAVEN_OPTS="${MAVEN_OPTS:--Xmx1g -Xms512m}"
+    for argument in "${maven_args[@]}"; do
+      case "$argument" in
+        -Dmaven.repo.local=*) export MAVEN_REPOSITORY="${argument#*=}" ;;
+      esac
+    done
+    : "${MAVEN_REPOSITORY:?coordinated provider-reject proof requires the candidate Maven repository}"
+    ./build-modular-telemetry-images.sh
+    cp config/runtime-mapping/modular-strict.yaml config/pipeline.runtime.yaml
+    ./mvnw -B --no-transfer-progress -f pom.xml -pl orchestrator-svc -am \
+      -Dquarkus.container-image.build=false \
+      -Dsurefire.failIfNoSpecifiedTests=false -Dfailsafe.failIfNoSpecifiedTests=false \
+      -Dcsv.e2e.prebuilt.modular.images=true \
+      -Dcsv.e2e.telemetry.enabled=true \
+      -Dcsv.e2e.telemetry.happy-path-only=false \
+      -Dcsv.e2e.input.file=input-csv-file-processing-svc/csv/payments_1k.csv \
+      -Dcsv-payments.payment-provider.provider-reject-probability=0.08 \
+      -Dtest=CsvPaymentsProviderRejectEndToEndIT test "${maven_args[@]}"
+    ;;
   ha|ha-scale)
-    configure_testcontainers() {
-      export DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
-      if ! docker info >/dev/null 2>&1; then sudo systemctl start docker || true; fi
-      for attempt in {1..10}; do
-        docker info >/dev/null 2>&1 && break
-        sleep 3
-      done
-      export DOCKER_API_VERSION="$(docker version --format '{{.Server.APIVersion}}')"
-      [[ -n "$DOCKER_API_VERSION" ]] || { echo "Docker server API version is unavailable" >&2; return 1; }
-      export TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy
-      export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-      export TPF_CI_QUIET="${TPF_CI_QUIET:-true}"
-      cat > "$HOME/.testcontainers.properties" <<EOF
-docker.client.strategy=$TESTCONTAINERS_DOCKER_CLIENT_STRATEGY
-docker.host=$DOCKER_HOST
-EOF
-      mkdir -p "$HOME/.cache/google-cloud-tools-java/jib"
-    }
     cleanup_compose() {
       local exit_code=$?
       local transport=${TPF_CSV_AWAIT_TRANSPORT:-sqs}

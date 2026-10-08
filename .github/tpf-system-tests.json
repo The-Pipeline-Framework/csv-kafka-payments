@@ -13,6 +13,10 @@
       "command": ["bash", "scripts/system-test-suite.sh", "ha-scale"],
       "timeoutMinutes": 360
     },
+    "provider-reject": {
+      "command": ["bash", "scripts/system-test-suite.sh", "provider-reject"],
+      "timeoutMinutes": 120
+    },
     "native": {
       "command": ["bash", "scripts/system-test-suite.sh", "native"],
       "timeoutMinutes": 360
