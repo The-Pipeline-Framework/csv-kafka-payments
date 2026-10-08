@@ -3227,14 +3227,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         && attributes.get("tpf.await.correlation_id") != null
                         && !attributes.get("tpf.await.correlation_id").isBlank(),
                 "Expected await interaction dispatch event to include correlation id.");
-        assertFalse(
-                replayDocument.events().stream()
-                        .anyMatch(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event())
+        List<PipelineExecutionEvent> fallbackEvents = replayDocument.events().stream()
+                        .filter(event -> AWAIT_UNIT_DISPATCH_COMPLETE.equals(event.event())
                                 || AWAIT_EXECUTION_WAITING.equals(event.event())
                                 || AWAIT_UNIT_ITEM_COMPLETED.equals(event.event())
                                 || AWAIT_UNIT_COMPLETED.equals(event.event())
-                                || AWAIT_RESUME_RELEASED.equals(event.event())),
-                "Expected healthy live itemized Await replay to avoid durable fallback lifecycle events.");
+                                || AWAIT_RESUME_RELEASED.equals(event.event()))
+                        .toList();
+        assertTrue(fallbackEvents.isEmpty(), () ->
+                "Expected healthy live itemized Await replay to avoid durable fallback lifecycle events. First events: "
+                        + fallbackEvents.stream().limit(5)
+                                .map(event -> event.event() + " at step " + event.step()
+                                        + " sequence " + event.sequence() + " attributes " + event.attributes())
+                                .toList());
     }
 
     private void assertItemizedAwaitLiveFlowStartsBeforeSourceExhausts(PipelineReplayDocument replayDocument) {
