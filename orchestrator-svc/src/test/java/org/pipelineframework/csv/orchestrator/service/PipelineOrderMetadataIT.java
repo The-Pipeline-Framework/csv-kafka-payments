@@ -20,13 +20,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.jar.JarFile;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
 
@@ -55,13 +57,19 @@ class PipelineOrderMetadataIT {
                 var orderEntry = Optional.ofNullable(application.getEntry("META-INF/pipeline/order.json"))
                         .orElseThrow(() -> new AssertionError(
                                 "The packaged coordinator must contain pipeline order metadata"));
-                String packagedOrder;
                 try (var orderStream = application.getInputStream(orderEntry)) {
-                    packagedOrder = new String(orderStream.readAllBytes(), StandardCharsets.UTF_8);
+                    JsonNode root = new ObjectMapper().readTree(orderStream);
+                    JsonNode orderNode = root.path("order");
+                    assertTrue(orderNode.isArray(), "Packaged pipeline order must be an array");
+                    List<String> packagedOrder = new ArrayList<>();
+                    for (JsonNode step : orderNode) {
+                        assertTrue(step.isTextual(), "Every packaged pipeline step name must be text");
+                        packagedOrder.add(step.textValue());
+                    }
+                    assertEquals(order, packagedOrder,
+                            "Packaged pipeline order must preserve the complete resolved step sequence");
                 }
                 for (String step : order) {
-                    assertTrue(packagedOrder.contains("\"" + step + "\""),
-                            () -> "The packaged pipeline order is missing step " + step);
                     String entryName = step.replace('.', '/') + ".class";
                     assertTrue(application.getEntry(entryName) != null,
                             () -> "The packaged coordinator is missing generated step " + entryName);

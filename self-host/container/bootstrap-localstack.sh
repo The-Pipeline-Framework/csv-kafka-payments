@@ -88,6 +88,25 @@ wait_for_await_interaction_indexes() {
   return 1
 }
 
+wait_for_await_interaction_table_active() {
+  local timeout_seconds="${DYNAMODB_INDEX_WAIT_SECONDS:-120}"
+  local table_status=""
+  local elapsed=0
+
+  for ((elapsed = 0; elapsed < timeout_seconds; elapsed++)); do
+    table_status="$(awslocal dynamodb describe-table --table-name tpf_await_interaction \
+      --query 'Table.TableStatus' --output text)"
+    if [[ "${table_status}" == "ACTIVE" ]]; then
+      return
+    fi
+    sleep 1
+  done
+
+  echo "DynamoDB table tpf_await_interaction did not become ACTIVE after ${timeout_seconds}s (status: ${table_status})." >&2
+  awslocal dynamodb describe-table --table-name tpf_await_interaction >&2 || true
+  return 1
+}
+
 ensure_await_interaction_index() {
   local index_name="$1"
   local hash_key="$2"
@@ -95,18 +114,35 @@ ensure_await_interaction_index() {
   local range_type="$4"
   local timeout_seconds="${DYNAMODB_INDEX_WAIT_SECONDS:-120}"
   local index_status=""
+  local update_output=""
+  local update_elapsed=0
+  local elapsed=0
 
   index_status="$(awslocal dynamodb describe-table --table-name tpf_await_interaction \
     --query "Table.GlobalSecondaryIndexes[?IndexName=='${index_name}'].IndexStatus | [0]" --output text)"
   if [[ "${index_status}" == "None" || -z "${index_status}" ]]; then
     echo "Adding missing DynamoDB index: ${index_name}"
-    awslocal dynamodb update-table --table-name tpf_await_interaction \
-      --attribute-definitions \
-        "AttributeName=${hash_key},AttributeType=S" \
-        "AttributeName=${range_key},AttributeType=${range_type}" \
-      --global-secondary-index-updates \
-        "[{\"Create\":{\"IndexName\":\"${index_name}\",\"KeySchema\":[{\"AttributeName\":\"${hash_key}\",\"KeyType\":\"HASH\"},{\"AttributeName\":\"${range_key}\",\"KeyType\":\"RANGE\"}],\"Projection\":{\"ProjectionType\":\"ALL\"}}}]" \
-      >/dev/null
+    wait_for_await_interaction_table_active
+    for ((update_elapsed = 0; update_elapsed < timeout_seconds; update_elapsed++)); do
+      if update_output="$(awslocal dynamodb update-table --table-name tpf_await_interaction \
+        --attribute-definitions \
+          "AttributeName=${hash_key},AttributeType=S" \
+          "AttributeName=${range_key},AttributeType=${range_type}" \
+        --global-secondary-index-updates \
+          "[{\"Create\":{\"IndexName\":\"${index_name}\",\"KeySchema\":[{\"AttributeName\":\"${hash_key}\",\"KeyType\":\"HASH\"},{\"AttributeName\":\"${range_key}\",\"KeyType\":\"RANGE\"}],\"Projection\":{\"ProjectionType\":\"ALL\"}}}]" 2>&1)"; then
+        break
+      fi
+      if [[ "${update_output}" != *"ResourceInUseException"* ]]; then
+        echo "Failed adding DynamoDB index ${index_name}: ${update_output}" >&2
+        return 1
+      fi
+      sleep 1
+      wait_for_await_interaction_table_active
+    done
+    if [[ "${update_output}" == *"ResourceInUseException"* ]]; then
+      echo "Timed out adding DynamoDB index ${index_name} after ${timeout_seconds}s of table update conflicts." >&2
+      return 1
+    fi
   fi
 
   for ((elapsed = 0; elapsed < timeout_seconds; elapsed++)); do
@@ -164,6 +200,10 @@ create_bucket_if_missing() {
   echo "Creating S3 bucket: ${bucket}"
   awslocal s3api create-bucket --bucket "${bucket}" >/dev/null
 }
+
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
 
 compose_up -d localstack postgres
 wait_for_localstack
