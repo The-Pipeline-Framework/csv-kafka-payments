@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -30,14 +31,18 @@ import java.util.jar.JarFile;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
 
 class PipelineOrderMetadataIT {
 
     @Test
     void generatedOrderRemainsResolvableForTerminalQueueSegments() {
-        List<String> order = PipelineOrderResourceLoader.loadOrder()
-                .orElseThrow(() -> new AssertionError("Generated pipeline order metadata is missing"));
+        List<String> order;
+        Path generatedOrder = Path.of("target", "classes", "META-INF", "pipeline", "order.json");
+        try (InputStream stream = Files.newInputStream(generatedOrder)) {
+            order = readOrder(stream);
+        } catch (IOException exception) {
+            throw new AssertionError("Could not read the generated pipeline order", exception);
+        }
 
         assertEquals(7, order.size(), "Queue terminal resolution requires the complete generated order");
         assertTrue(order.getLast().endsWith("PersistencePaymentOutputSideEffectGrpcClientStep"),
@@ -58,15 +63,7 @@ class PipelineOrderMetadataIT {
                         .orElseThrow(() -> new AssertionError(
                                 "The packaged coordinator must contain pipeline order metadata"));
                 try (var orderStream = application.getInputStream(orderEntry)) {
-                    JsonNode root = new ObjectMapper().readTree(orderStream);
-                    JsonNode orderNode = root.path("order");
-                    assertTrue(orderNode.isArray(), "Packaged pipeline order must be an array");
-                    List<String> packagedOrder = new ArrayList<>();
-                    for (JsonNode step : orderNode) {
-                        assertTrue(step.isTextual(), "Every packaged pipeline step name must be text");
-                        packagedOrder.add(step.textValue());
-                    }
-                    assertEquals(order, packagedOrder,
+                    assertEquals(order, readOrder(orderStream),
                             "Packaged pipeline order must preserve the complete resolved step sequence");
                 }
                 for (String step : order) {
@@ -78,5 +75,16 @@ class PipelineOrderMetadataIT {
         } catch (IOException exception) {
             throw new AssertionError("Could not inspect the packaged coordinator application", exception);
         }
+    }
+
+    private static List<String> readOrder(InputStream stream) throws IOException {
+        JsonNode orderNode = new ObjectMapper().readTree(stream).path("order");
+        assertTrue(orderNode.isArray(), "Pipeline order must be an array");
+        List<String> order = new ArrayList<>();
+        for (JsonNode step : orderNode) {
+            assertTrue(step.isTextual(), "Every pipeline step name must be text");
+            order.add(step.textValue());
+        }
+        return order;
     }
 }
