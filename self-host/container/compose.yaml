@@ -110,6 +110,7 @@ services:
         -Dpipeline.await-admission.store=dynamo
         -Dpipeline.orchestrator.dynamo.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.await-completion-lifecycle-table=tpf_await_completion_lifecycle
         -Dpipeline.orchestrator.dynamo.await-admission-table=tpf_await_admission
         -Dkafka.bootstrap.servers=${TPF_KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
         -Dtpf.await.kafka.reactive-messaging.enabled=${TPF_RUNTIME_AWAIT_KAFKA_ENABLED:-false}
@@ -207,6 +208,7 @@ services:
         -Dpipeline.orchestrator.state-provider=dynamo
         -Dpipeline.orchestrator.dynamo.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.await-completion-lifecycle-table=tpf_await_completion_lifecycle
         -Dpipeline.orchestrator.dynamo.execution-table=tpf_execution
         -Dpipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
         -Dpipeline.orchestrator.dynamo.execution-payload-table=tpf_execution_payload
@@ -325,6 +327,7 @@ services:
         -Dpipeline.orchestrator.sqs.endpoint-override=http://localstack:4566
         -Dpipeline.orchestrator.dynamo.region=${AWS_REGION:-us-east-1}
         -Dpipeline.orchestrator.dynamo.endpoint-override=http://localstack:4566
+        -Dpipeline.orchestrator.dynamo.await-completion-lifecycle-table=tpf_await_completion_lifecycle
         -Dpipeline.orchestrator.dynamo.execution-table=tpf_execution
         -Dpipeline.orchestrator.dynamo.execution-key-table=tpf_execution_key
         -Dpipeline.orchestrator.dynamo.execution-payload-table=tpf_execution_payload
