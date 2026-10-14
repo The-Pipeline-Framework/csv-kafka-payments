@@ -42,11 +42,6 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.awaitable.sqs.SqsAwaitCompletionEnvelope;
 import org.pipelineframework.awaitable.sqs.SqsAwaitDispatchEnvelope;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.csv.domain.PaymentRecord;
-import org.pipelineframework.csv.domain.PaymentStatus;
-import org.pipelineframework.csv.domain.PipelineDomainProtoAdapters;
-import org.pipelineframework.csv.grpc.PipelineTypes;
-import com.google.protobuf.util.JsonFormat;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -218,7 +213,8 @@ public class PaymentProviderSqsAwaitMock {
     awaitTelemetry.recordProviderAdmitted();
     SqsAwaitCompletionEnvelope completion;
     try {
-      completion = handle(PipelineJson.mapper().readValue(message.body(), SqsAwaitDispatchEnvelope.class));
+      completion = PaymentProviderAwaitRequestHandler.complete(
+          PipelineJson.mapper().readValue(message.body(), SqsAwaitDispatchEnvelope.class), paymentProvider);
     } catch (Exception e) {
       LOG.errorf(e, "Failed processing CSV SQS await request id=%s", message.messageId());
       return;
@@ -237,20 +233,6 @@ public class PaymentProviderSqsAwaitMock {
     } catch (RuntimeException e) {
       LOG.errorf(e, "Failed sending CSV SQS await completion id=%s", message.messageId());
     }
-  }
-
-  private SqsAwaitCompletionEnvelope handle(SqsAwaitDispatchEnvelope dispatch) {
-    PaymentRecord paymentRecord = PipelineDomainProtoAdapters.fromProto(paymentRecord(dispatch.requestPayload()));
-    validatePaymentRecord(paymentRecord);
-    PaymentStatus status = paymentProvider.processPayment(paymentRecord);
-    return new SqsAwaitCompletionEnvelope(
-        dispatch.tenantId(),
-        dispatch.interactionId(),
-        dispatch.correlationId(),
-        dispatch.resumeToken(),
-        dispatch.interactionId(),
-        PaymentProviderAwaitTransportPayload.protobufJson(PipelineDomainProtoAdapters.toProto(status)),
-        "csv-payments-sqs-mock-provider");
   }
 
   private void delayCompletion() {
@@ -346,26 +328,6 @@ public class PaymentProviderSqsAwaitMock {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       LOG.warnf(e, "Interrupted while shutting down CSV SQS await provider executor");
-    }
-  }
-
-  private static void validatePaymentRecord(PaymentRecord paymentRecord) {
-    if (paymentRecord == null) {
-      throw new IllegalArgumentException("SQS await payment request payload must contain a PaymentRecord");
-    }
-    if (paymentRecord.amount() == null || paymentRecord.recipient() == null || paymentRecord.recipient().isBlank()
-        || paymentRecord.currency() == null || paymentRecord.id() == null) {
-      throw new IllegalArgumentException("PaymentRecord must include id, amount, recipient, and currency");
-    }
-  }
-
-  private static PipelineTypes.PaymentRecord paymentRecord(Object payload) {
-    try {
-      var builder = PipelineTypes.PaymentRecord.newBuilder();
-      JsonFormat.parser().ignoringUnknownFields().merge(PipelineJson.mapper().writeValueAsString(payload), builder);
-      return builder.build();
-    } catch (Exception e) {
-      throw new IllegalArgumentException("SQS await payment request payload must contain a v3 PaymentRecord", e);
     }
   }
 

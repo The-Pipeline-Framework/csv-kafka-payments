@@ -122,6 +122,8 @@
         <csv.runtime.layout>modular</csv.runtime.layout>
         <tpf.build.transport>GRPC</tpf.build.transport>
         <tpf.build.platform>COMPUTE</tpf.build.platform>
+        <!-- Generated FUNCTION handlers need Lambda's API at compile time. -->
+        <tpf.build.lambda.scope>provided</tpf.build.lambda.scope>
     </properties>
 
     <repositories>
@@ -169,6 +171,14 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-lambda-java-core</artifactId>
+            <scope>${tpf.build.lambda.scope}</scope>
+        </dependency>
+    </dependencies>
 
     <build>
         <resources>
@@ -501,6 +511,11 @@
                             </goals>
                             <configuration>
                                 <proc>none</proc>
+                                <!-- REST resources can reference generated pipeline-server bridges. -->
+                                <compilerArgs>
+                                    <arg>-sourcepath</arg>
+                                    <arg>${project.build.directory}/generated-sources/pipeline/pipeline-server</arg>
+                                </compilerArgs>
                                 <compileSourceRoots>
                                     <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/rest-server</compileSourceRoot>
                                 </compileSourceRoots>
