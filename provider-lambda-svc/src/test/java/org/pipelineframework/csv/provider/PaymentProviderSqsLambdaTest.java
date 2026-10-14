@@ -120,12 +120,17 @@ class PaymentProviderSqsLambdaTest {
   @Test
   void emptyBatchSucceedsAndUnidentifiedFailureFailsWholeInvocation() throws Exception {
     SqsClient sqs = mock(SqsClient.class);
+    when(sqs.sendMessage(any(SendMessageRequest.class)))
+        .thenReturn(SendMessageResponse.builder().messageId("completion-1").build());
     var handler = new PaymentProviderSqsLambda(provider(), sqs, RESPONSE_QUEUE);
     assertTrue(handler.handleRequest(event(), null).getBatchItemFailures().isEmpty());
     assertThrows(IllegalArgumentException.class,
         () -> handler.handleRequest(event(message(null, "{not-json")), null));
     assertThrows(IllegalArgumentException.class,
         () -> handler.handleRequest(event(message(null, dispatchBodyRest())), null));
+    assertThrows(IllegalArgumentException.class,
+        () -> handler.handleRequest(event(message("valid", dispatchBodyRest()),
+            message(null, dispatchBodyRest())), null));
     verify(sqs, times(0)).sendMessage(any(SendMessageRequest.class));
   }
 

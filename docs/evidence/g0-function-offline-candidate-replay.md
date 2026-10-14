@@ -70,3 +70,18 @@ Exit 0; six provider tests passed, none skipped. Log `/tmp/tpf-csv-g0.Vhy5YD/pro
 For a packaged startup/invocation check, a temporary Java driver called the official `QuarkusStreamHandler::handleRequest` from the built runner/`lib` classpath with an empty SQS batch, dummy AWS credentials/queue URL, and no reachable cloud endpoints. It returned `{"batchItemFailures":[]}` and exited 0. Log `/tmp/tpf-csv-g0.Vhy5YD/provider-lambda-db2-streamhandler-final.log` SHA-256 `0a4089d9db097bb70c0a2f341839a676d143253d673d41a3bcc3d613d6259c7c`; the log shows the `lambda` profile, both Kafka channels disabled, and no listener. Provider package config excludes both inherited resident provider beans and disables HTTP/gRPC listeners and default OTLP export. Quarkus's documented Lambda Java handler/name selection applies; the temporary driver is `/tmp/tpf-csv-g0.Vhy5YD/InvokeProviderLambda.java`. No SQS or AWS call was made by the empty-batch probe; successful response sends and retry behavior were unit tested with a mocked SQS client. Third-party Quarkus/Lambda/Surefire dependencies were copied into the isolated repo cache after SHA-1 sidecar verification; no framework component was sourced or installed locally.
 
 The official matching framework cohort remains unavailable because current `tpf/system-tests` materialization is blocked by an unrelated examples fixture. This controlled replay proves neither that cohort nor AWS deployment, durable recovery, object ingestion, persistence service selection, or whole Hosted pilot acceptance.
+
+
+## Review follow-up (2026-10-15)
+
+The provider now validates all message IDs before it processes any record. Its mixed
+batch regression puts a valid REST request before a missing-ID record and asserts
+that the whole invocation fails without an SQS completion send. Focused provider
+verification passes all six tests. The full `./build-provider-lambda.sh` entrypoint
+also passes after this change, running the three affected self-host SQS tests and
+six provider tests before packaging.
+
+The build entrypoint rejects enabled `skipTests`, `skipUnitTests`, or
+`maven.test.skip` properties in command-line arguments, `MAVEN_ARGS`, and
+`TPF_MAVEN_ARGS_FILE`. Verified CLI and environment/file cases all exit 2 before
+either build starts. `bash -n build-provider-lambda.sh` and `git diff --check` pass.

@@ -45,11 +45,13 @@ public class PaymentProviderSqsLambda implements RequestHandler<SQSEvent, SQSBat
     if (event == null || event.getRecords() == null) {
       throw new IllegalArgumentException("SQS provider event must contain records");
     }
-    List<SQSBatchResponse.BatchItemFailure> failures = new ArrayList<>();
     for (SQSEvent.SQSMessage message : event.getRecords()) {
       if (message == null || message.getMessageId() == null || message.getMessageId().isBlank()) {
         throw new IllegalArgumentException("SQS provider record has no message ID");
       }
+    }
+    List<SQSBatchResponse.BatchItemFailure> failures = new ArrayList<>();
+    for (SQSEvent.SQSMessage message : event.getRecords()) {
       try {
         publishCompletion(message);
       } catch (Exception e) {
