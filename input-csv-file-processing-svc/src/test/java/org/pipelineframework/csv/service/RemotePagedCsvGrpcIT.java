@@ -47,7 +47,7 @@ class RemotePagedCsvGrpcIT {
     Files.writeString(csv, "ID,Recipient,Amount,Currency\n"
         + "first,A,1.00,EUR\n"
         + "second,B,2.00,EUR\n");
-    var input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-two");
+    var input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-two", org.pipelineframework.type.CanonicalFieldValue.absent());
     var request = new PagedSourceRequest<>(input, "execution-source", Optional.empty(), 2);
     var wireInput = PipelineTypes.CsvPaymentsInputFile.newBuilder()
         .setCsvFolderPath(tempDir.toString())

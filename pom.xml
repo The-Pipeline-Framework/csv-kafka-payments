@@ -427,6 +427,10 @@
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>representation-provider-opencsv</artifactId>
                             </path>
+                            <path>
+                                <groupId>org.pipelineframework</groupId>
+                                <artifactId>object-ingest-connector</artifactId>
+                            </path>
                         </annotationProcessorPaths>
                     </configuration>
                     <executions>

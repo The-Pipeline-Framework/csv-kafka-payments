@@ -19,11 +19,13 @@ package org.pipelineframework.csv.service;
 import java.io.Reader;
 import java.util.Iterator;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import com.opencsv.bean.CsvToBeanBuilder;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.blocking.CloseableIterator;
+import org.pipelineframework.connector.ConnectorBindingRegistry;
 import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
 import org.pipelineframework.csv.common.domain.FilePathAwareMappingStrategy;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
@@ -37,12 +39,12 @@ public class ProcessCsvPaymentsInputService
     implements PagedOpenCsvInputBoundary<CsvPaymentsInputFile, org.pipelineframework.csv.common.domain.PaymentRecord> {
 
   private static final Logger LOG = Logger.getLogger(ProcessCsvPaymentsInputService.class);
-  private final OpenCsvPagedPaymentSource pagedSource = new OpenCsvPagedPaymentSource();
+  @Inject ConnectorBindingRegistry connectorBindings;
 
   @Override
   public PagedSourceStream<org.pipelineframework.csv.common.domain.PaymentRecord> openPage(
       PagedSourceRequest<CsvPaymentsInputFile> request) {
-    return pagedSource.open(request);
+    return new OpenCsvPagedPaymentSource(reference -> connectorBindings.openRead(reference)).open(request);
   }
 
   /**
@@ -50,6 +52,9 @@ public class ProcessCsvPaymentsInputService
    */
   @Override
   public CloseableIterator<org.pipelineframework.csv.common.domain.PaymentRecord> iterateBlocking(CsvPaymentsInputFile input) {
+    if (!input.contentRef().isAbsent()) {
+      throw new IllegalStateException("Referenced CSV input requires the paged source boundary");
+    }
     try {
         Reader reader = java.nio.file.Files.newBufferedReader(input.filepath(), java.nio.charset.StandardCharsets.UTF_8);
         try {

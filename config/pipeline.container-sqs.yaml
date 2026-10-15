@@ -62,6 +62,7 @@ types:
       - [filepath, path]
       - [csvFolderPath, path]
       - [sourceIdentity, string]
+      - ['contentRef?', payload_ref]
   PaymentRecord:
     fields:
       - [id, uuid]
