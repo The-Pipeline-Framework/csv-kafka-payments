@@ -149,7 +149,13 @@ final class OpenCsvPagedPaymentSource {
     private void drain() {
       while (!terminated && demand > 0) {
         if (consumed == request.maxRecords()) {
-          long boundary = source.recordBoundaryPosition();
+          long boundary;
+          try {
+            boundary = source.recordBoundaryPosition();
+          } catch (Throwable failure) {
+            fail(failure);
+            return;
+          }
           finish(boundary >= start.version().sizeBytes(), boundary);
           return;
         }
@@ -164,7 +170,13 @@ final class OpenCsvPagedPaymentSource {
           finish(true, source.position());
           return;
         }
-        long boundary = source.recordBoundaryPosition();
+        long boundary;
+        try {
+          boundary = source.recordBoundaryPosition();
+        } catch (Throwable failure) {
+          fail(failure);
+          return;
+        }
         consumed++;
         if (isEmpty(row)) {
           if (consumed == request.maxRecords()) {
