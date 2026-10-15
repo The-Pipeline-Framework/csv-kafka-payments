@@ -30,7 +30,7 @@ class OpenCsvPagedPaymentSourceTest {
     Files.writeString(csv, "ID,Recipient,Amount,Currency\n"
         + "first,\"María\nGarcía\",10.00,EUR\n"
         + "second,Zoë,20.00,USD\n");
-    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-1");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-1", org.pipelineframework.type.CanonicalFieldValue.absent());
     OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
 
     PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
@@ -62,7 +62,7 @@ class OpenCsvPagedPaymentSourceTest {
     Files.writeString(csv, "ID,Recipient,Amount,Currency\r\n"
         + "first,A,1.00,EUR\r\n"
         + "second,B,2.00,EUR\r\n");
-    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-crlf");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-crlf", org.pipelineframework.type.CanonicalFieldValue.absent());
     OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
 
     PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
@@ -93,7 +93,7 @@ class OpenCsvPagedPaymentSourceTest {
         + "first,A,1.00,EUR\r\n"
         + "\r\n"
         + "second,B,2.00,EUR\r\n");
-    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-crlf-empty");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-crlf-empty", org.pipelineframework.type.CanonicalFieldValue.absent());
     OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
 
     PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
@@ -149,7 +149,7 @@ class OpenCsvPagedPaymentSourceTest {
   void rejectsCheckpointWhenPinnedSnapshotChanges() throws Exception {
     Path csv = tempDir.resolve("payments.csv");
     Files.writeString(csv, "ID,Recipient,Amount,Currency\nfirst,A,1.00,EUR\nsecond,B,2.00,EUR\n");
-    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-1");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-1", org.pipelineframework.type.CanonicalFieldValue.absent());
     OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
     PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
         input, "execution-source", Optional.empty(), 1));
@@ -167,7 +167,7 @@ class OpenCsvPagedPaymentSourceTest {
   void repeatedEmptyNonExhaustedPagesAdvanceWithoutLooping() throws Exception {
     Path csv = tempDir.resolve("payments.csv");
     Files.writeString(csv, "ID,Recipient,Amount,Currency\n\n\nsecond,B,2.00,EUR\n");
-    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-empty-page");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-empty-page", org.pipelineframework.type.CanonicalFieldValue.absent());
     OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
 
     PagedSourceStream<PaymentRecord> first = source.open(new PagedSourceRequest<>(
@@ -208,7 +208,7 @@ class OpenCsvPagedPaymentSourceTest {
     IntStream.range(0, 10_000).forEach(index -> content.append("payment-")
         .append(index).append(",Recipient ").append(index).append(",1.00,EUR\n"));
     Files.writeString(csv, content);
-    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-10000");
+    CsvPaymentsInputFile input = new CsvPaymentsInputFile(csv, tempDir, "snapshot-10000", org.pipelineframework.type.CanonicalFieldValue.absent());
     OpenCsvPagedPaymentSource source = new OpenCsvPagedPaymentSource();
     Optional<String> checkpoint = Optional.empty();
     List<String> ids = new ArrayList<>(10_000);

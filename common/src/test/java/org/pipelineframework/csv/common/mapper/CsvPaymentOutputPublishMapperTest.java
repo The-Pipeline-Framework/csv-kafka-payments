@@ -42,6 +42,19 @@ class CsvPaymentOutputPublishMapperTest {
     }
 
     @Test
+    void logicalS3InputPathKeepsOutputNameStableAndWithinPublishPrefix() {
+        CsvPaymentOutputPublishMapper mapper = new CsvPaymentOutputPublishMapper();
+        Path logicalPath = Path.of("s3", "csv-payments-input", "incoming", "payments-123.csv");
+        PaymentOutput first = paymentOutput(logicalPath, "csv-1", "Alice", "100.00");
+        PaymentOutput reopened = paymentOutput(logicalPath, "csv-1", "Alice", "100.00");
+
+        assertEquals("payments-123.csv", mapper.groupKey(first));
+        assertEquals(mapper.groupKey(first), mapper.groupKey(reopened));
+        assertEquals(Path.of("processed", "payments-123.csv.out"),
+            Path.of("processed").resolve(mapper.groupKey(first) + ".out"));
+    }
+
+    @Test
     void streamsRowsWithoutRepeatingHeader() {
         CsvPaymentOutputPublishMapper mapper = new CsvPaymentOutputPublishMapper();
         PaymentOutput first = paymentOutput(tempDir.resolve("payments.csv"), "csv-1", "Alice", "100.00");

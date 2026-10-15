@@ -9,6 +9,19 @@
       "name" : "CsvPaymentsInputFile",
       "kind" : "record",
       "fields" : [ {
+        "number" : 5,
+        "name" : "contentRef",
+        "protoName" : "content_ref",
+        "type" : "payload_ref",
+        "presence" : "OPTIONAL",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
         "number" : 1,
         "name" : "csvFolderPath",
         "protoName" : "csv_folder_path",
