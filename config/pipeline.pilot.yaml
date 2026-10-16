@@ -82,9 +82,7 @@ aspects:
         - ProcessCsvPaymentsInput
         - FinalizePaymentOutput
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
-      enabledTargets:
-        - GRPC_SERVICE
-        - CLIENT_STEP
+      # Let the compiler select adapters from the configured transport and role.
 types:
   CsvPaymentsInputFile:
     fields:

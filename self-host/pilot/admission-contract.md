@@ -12,6 +12,10 @@ Invocation verifies native owned-reference provenance through the S3 provider, m
 
 The existing custom Durable host handlers cannot be packaged with Quarkus Lambda HTTP: the first build correctly rejects multiple handlers. The dedicated `ingress-lambda-svc` HTTP artifact therefore consumes only the public coordination-model artifact and invokes the existing AwsDurableIngressHandler at a pinned numeric function version. That unchanged native host calls AwsDurableExecutionStarter to start the pinned coordinator. This is host composition, not a replacement starter or coordinator. A provider start receipt is not semantic admission, business completion, replay, or Cloud ACTIVE.
 
+## Transport selection for persistence
+
+The pilot declares `platform: FUNCTION` and `transport: REST`. Its persistence aspect leaves `enabledTargets` unset: the compiler selects adapters from the transport and deployment role. The copied `GRPC_SERVICE` / `CLIENT_STEP` override was misleading; both are gRPC targets. At the published compiler baseline, model expansion runs before target resolution, which replaces those initial targets with REST targets. The old entries also cause the protobuf generator to emit unused gRPC persistence stubs; omitting them removes those stubs without removing the REST persistence steps. Verify the generated REST persistence clients, resources and function handlers and the two persistence entries in the execution order when changing this configuration. Compilation does not establish remote database connectivity or completed payment persistence.
+
 ## Verification obligations
 
 - Missing IAM, a plain forged principal/header, foreign account/ARN, wrong tenant/scope and out-of-window requests fail before writes/invocation.
