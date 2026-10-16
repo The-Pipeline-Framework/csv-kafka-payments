@@ -1,0 +1,13 @@
+name: tpf-csv-finite-proof
+services:
+  localstack:
+    image: localstack/localstack:3.8
+    ports:
+      - "127.0.0.1:4597:4566"
+    environment:
+      SERVICES: dynamodb,sqs,s3
+      S3_SKIP_SIGNATURE_VALIDATION: "0"
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_ENDPOINT_STRATEGY: path

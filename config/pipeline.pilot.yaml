@@ -1,0 +1,239 @@
+# S3 reader compilation/integration fixture; not a deployable pilot ingress.
+# Polling is disabled. A one-object prefix listing can repeatedly select an
+# already-admitted retained object; repeat-use admission needs a separate proof.
+# Uses the existing S3 connector and preserves native admission identities.
+version: 3
+appName: csv-payments
+basePackage: org.pipelineframework.csv
+transport: REST
+platform: FUNCTION
+connectors:
+  csv-input-s3:
+    provider: s3.objects
+    version: 1
+  csv-output-s3:
+    provider: s3.objects
+    version: 1
+sources:
+  csv-payment-files:
+    kind: object
+    provider: s3
+    binding: csv-input-s3
+    location:
+      bucket: csv-payments-input
+      prefix: incoming/
+    filter:
+      include: ["incoming/*.csv"]
+    poll:
+      enabled: false
+      interval: PT10S
+      batchSize: 1
+    identity:
+      fields: [provider, container, key, etag]
+    payload:
+      mode: reference
+      maxBytes: 1048576
+input:
+  from: csv-payment-files
+  emits:
+    type: org.pipelineframework.csv.domain.CsvPaymentsInputFile
+    typeName: CsvPaymentsInputFile
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper
+publish:
+  csv-upload-files:
+    kind: object
+    provider: s3
+    binding: csv-input-s3
+    location:
+      bucket: csv-payments-input
+      prefix: incoming/
+    naming:
+      keyTemplate: "{groupKey}.csv"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+  csv-payment-output-files:
+    kind: object
+    provider: s3
+    binding: csv-output-s3
+    location:
+      bucket: csv-payments-output
+      prefix: processed/
+    naming:
+      keyTemplate: "{groupKey}.out"
+    payload:
+      contentType: text/csv
+    grouping:
+      maxOpenGroups: 1
+output:
+  to: csv-payment-output-files
+  consumes:
+    type: org.pipelineframework.csv.domain.PaymentOutput
+    typeName: PaymentOutput
+    mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
+aspects:
+  persistence:
+    enabled: true
+    scope: STEPS
+    position: AFTER_STEP
+    config:
+      targetSteps:
+        - ProcessCsvPaymentsInput
+        - FinalizePaymentOutput
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+      # Let the compiler select adapters from the configured transport and role.
+types:
+  CsvPaymentsInputFile:
+    fields:
+      - [filepath, path]
+      - [csvFolderPath, path]
+      - [sourceIdentity, string]
+      - ['contentRef?', payload_ref]
+  PaymentRecord:
+    fields:
+      - [id, uuid]
+      - [csvId, string]
+      - [recipient, string]
+      - [amount, decimal]
+      - [currency, currency]
+      - [csvPaymentsInputFilePath, path]
+    mappings:
+      persistence:
+        type: org.pipelineframework.csv.common.domain.PaymentRecord
+        mapper: org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper
+      opencsv:
+        type: org.pipelineframework.csv.common.domain.PaymentRecord
+        mapper: org.pipelineframework.csv.common.mapper.PaymentRecordRepresentationMapper
+  ApprovedPaymentStatus:
+    fields:
+      - [reference, string]
+      - [status, string]
+      - [message, string]
+      - [fee, decimal]
+      - [conversationId, uuid]
+      - [statusCode, int64]
+      - [paymentRecordId, uuid]
+      - [paymentRecord, PaymentRecord]
+  UnapprovedPaymentStatus:
+    fields:
+      - [reference, string]
+      - [status, string]
+      - [message, string]
+      - [fee, decimal]
+      - [conversationId, uuid]
+      - [statusCode, int64]
+      - [paymentRecordId, uuid]
+      - [paymentRecord, PaymentRecord]
+  ApprovedPaymentOutput:
+    fields:
+      - [csvPaymentsOutputFilename, string]
+      - [csvPaymentsInputFilePath, path]
+      - [csvId, string]
+      - [recipient, string]
+      - [amount, decimal]
+      - [currency, currency]
+      - [conversationId, uuid]
+      - [status, int64]
+      - [message, string]
+      - [fee, decimal]
+  UnapprovedPaymentOutput:
+    fields:
+      - [csvPaymentsOutputFilename, string]
+      - [csvPaymentsInputFilePath, path]
+      - [csvId, string]
+      - [recipient, string]
+      - [amount, decimal]
+      - [currency, currency]
+      - [conversationId, uuid]
+      - [status, int64]
+      - [message, string]
+      - [fee, decimal]
+  PaymentOutput:
+    fields:
+      - [csvPaymentsOutputFilename, string]
+      - [csvPaymentsInputFilePath, path]
+      - [csvId, string]
+      - [recipient, string]
+      - [amount, decimal]
+      - [currency, currency]
+      - [conversationId, uuid]
+      - [status, int64]
+      - [message, string]
+      - [fee, decimal]
+    mappings:
+      persistence:
+        type: org.pipelineframework.csv.common.domain.PaymentOutput
+        mapper: org.pipelineframework.csv.common.mapper.PaymentOutputPersistenceMapper
+  PaymentStatus:
+    variants:
+      approved: ApprovedPaymentStatus
+      unapproved: UnapprovedPaymentStatus
+  PaymentOutputBranch:
+    variants:
+      approved: ApprovedPaymentOutput
+      unapproved: UnapprovedPaymentOutput
+steps:
+  - name: Process Csv Payments Input
+    service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
+    cardinality: ONE_TO_MANY
+    paging:
+      maxRecords: 1000
+    input: CsvPaymentsInputFile
+    output: PaymentStatus
+    java:
+      input: org.pipelineframework.csv.domain.CsvPaymentsInputFile
+      output: org.pipelineframework.csv.domain.PaymentStatus
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileGrpcMapper
+    await:
+      operationOutput:
+        type: PaymentRecord
+        java: org.pipelineframework.csv.common.domain.PaymentRecord
+      timeout: PT5M
+      idempotency:
+        fields: [csvPaymentsInputFilePath, csvId, recipient, amount, currency]
+      correlation:
+        strategy: signedResumeToken
+      transport:
+        type: sqs
+        request:
+          queueUrl: http://localstack:4566/000000000000/csv-payment-await-requests
+        response:
+          queueUrl: http://localstack:4566/000000000000/csv-payment-await-results
+  - name: Process Approved Payment Status
+    service: org.pipelineframework.csv.service.ProcessApprovedPaymentStatusService
+    cardinality: ONE_TO_ONE
+    input: ApprovedPaymentStatus
+    output: ApprovedPaymentOutput
+    java:
+      input: org.pipelineframework.csv.domain.ApprovedPaymentStatus
+      output: org.pipelineframework.csv.domain.ApprovedPaymentOutput
+  - name: Process Unapproved Payment Status
+    service: org.pipelineframework.csv.service.ProcessUnapprovedPaymentStatusService
+    cardinality: ONE_TO_ONE
+    input: UnapprovedPaymentStatus
+    output: UnapprovedPaymentOutput
+    java:
+      input: org.pipelineframework.csv.domain.UnapprovedPaymentStatus
+      output: org.pipelineframework.csv.domain.UnapprovedPaymentOutput
+  - name: Finalize Payment Output
+    service: org.pipelineframework.csv.service.ProcessFinalizePaymentOutputService
+    cardinality: ONE_TO_ONE
+    input: PaymentOutputBranch
+    output: PaymentOutput
+    java:
+      input: org.pipelineframework.csv.domain.PaymentOutputBranch
+      output: org.pipelineframework.csv.domain.PaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputGrpcMapper
+    terminal: true
+
+# Restricted FUNCTION upload shape; live AWS and Cloud deployment acceptance are separate gates.
+httpPayloads:
+  csv-input-upload:
+    direction: upload
+    object: csv-upload-files
+    canonicalType: CsvPaymentsInputFile
+    referenceField: contentRef
+    contentTypes: [text/csv]
+    maxBytes: 1048576
+    authorizationScope: csv.upload
