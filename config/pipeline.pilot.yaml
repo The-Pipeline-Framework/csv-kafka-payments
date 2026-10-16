@@ -72,17 +72,7 @@ output:
     type: org.pipelineframework.csv.domain.PaymentOutput
     typeName: PaymentOutput
     mapper: org.pipelineframework.csv.common.mapper.CsvPaymentOutputPublishMapper
-aspects:
-  persistence:
-    enabled: true
-    scope: STEPS
-    position: AFTER_STEP
-    config:
-      targetSteps:
-        - ProcessCsvPaymentsInput
-        - FinalizePaymentOutput
-      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
-      # Let the compiler select adapters from the configured transport and role.
+# First burn: S3 results and native Durable state; SQL history is not enabled.
 types:
   CsvPaymentsInputFile:
     fields:

@@ -30,4 +30,18 @@ class DurableCompositionTest {
         assertThat(canonical.sourceIdentity()).isEqualTo("object-A");
         assertThat(canonical.contentRef().isAbsent()).isTrue();
     }
+
+    @Test void firstBurnKeepsAwaitAndOutputWithoutSqlHistorySteps() throws Exception {
+        try (var stream = getClass().getResourceAsStream("/META-INF/pipeline/order.json")) {
+            assertThat(stream).as("Actual producer execution order is packaged").isNotNull();
+            var compiled = PipelineJson.mapper().readTree(stream).path("order");
+            assertThat(compiled.isArray()).isTrue();
+            var order = new java.util.ArrayList<String>();
+            compiled.forEach(step -> order.add(step.asText()));
+            assertThat(order).contains(
+                "org.pipelineframework.csv.service.pipeline.ProcessCsvPaymentsInputDeferredCompletionStep",
+                "org.pipelineframework.csv.service.pipeline.ProcessFinalizePaymentOutputRestClientStep");
+            assertThat(order).noneMatch(step -> step.contains("Persistence"));
+        }
+    }
 }

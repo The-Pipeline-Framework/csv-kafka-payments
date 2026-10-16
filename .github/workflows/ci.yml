@@ -75,7 +75,9 @@ jobs:
           cache-path: ${{ github.workspace }}/.m2/repository
       - name: Build the existing FUNCTION REST producer
         run: >-
-          ./build-pipeline-runtime.sh -DskipTests -DskipITs=true
+          ./build-pipeline-runtime.sh
+          -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc
+          -DskipTests -DskipITs=true
           -Dtpf.build.platform=FUNCTION -Dtpf.build.lambda.scope=compile
           -Dquarkus.container-image.build=false
           -Dtpf.await.kafka.reactive-messaging.enabled=false
@@ -116,7 +118,9 @@ jobs:
           cache-path: ${{ github.workspace }}/.m2/repository
       - name: Generate the existing native Durable input seam
         run: >-
-          ./build-pipeline-runtime.sh -DskipTests -DskipITs=true
+          ./build-pipeline-runtime.sh
+          -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc
+          -DskipTests -DskipITs=true
           -Dtpf.build.platform=FUNCTION -Dtpf.build.coordination.host=AWS_DURABLE
           -Dtpf.build.lambda.scope=compile -Dquarkus.container-image.build=false
           -Dtpf.await.kafka.reactive-messaging.enabled=false

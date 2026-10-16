@@ -1,5 +1,7 @@
 # CSV AWS Durable action package
 
+The first burn retains S3 results and native Durable state, without the optional SQL history aspect. The ordinary application retains its SQL path.
+
 This package composes the existing published `aws-durable-action` handler with the
 compiler-generated CSV decoder and application metadata. It adds no handler,
 coordinator, workflow store, consumer, or infrastructure implementation. It is
@@ -10,7 +12,9 @@ Build with JDK 21 and the repository-local Maven cache:
 
 ```sh
 export PIPELINE_CONFIG="$PWD/config/pipeline.pilot.yaml" PIPELINE_TRANSPORT=REST
-./build-pipeline-runtime.sh -DskipTests -DskipITs=true \
+./build-pipeline-runtime.sh \
+  -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc \
+  -DskipTests -DskipITs=true \
   -Dtpf.build.platform=FUNCTION -Dtpf.build.coordination.host=AWS_DURABLE \
   -Dtpf.build.lambda.scope=compile -Dquarkus.container-image.build=false \
   -Dtpf.await.kafka.reactive-messaging.enabled=false \
