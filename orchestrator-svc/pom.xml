@@ -32,6 +32,12 @@
     </properties>
 
     <dependencies>
+        <!-- Compile the generated Durable decoder; its host is packaged separately. -->
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-aws-durable-coordination-host</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- Common module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>

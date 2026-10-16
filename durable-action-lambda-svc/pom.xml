@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+ <modelVersion>4.0.0</modelVersion>
+ <parent><groupId>org.pipelineframework.csv</groupId><artifactId>csv-payments-parent</artifactId><version>26.9.4-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+ <artifactId>durable-action-lambda-svc</artifactId><name>CSV composition of the published AWS Durable action handler</name>
+ <dependencies>
+  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version></dependency>
+  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>pipeline-server</classifier></dependency>
+  <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-aws-durable-coordination-host</artifactId></dependency>
+  <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-amazon-lambda</artifactId></dependency>
+  <dependency><groupId>io.quarkiverse.amazonservices</groupId><artifactId>quarkus-amazon-dynamodb</artifactId></dependency>
+  <dependency><groupId>io.quarkiverse.amazonservices</groupId><artifactId>quarkus-amazon-lambda</artifactId></dependency>
+  <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
+  <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><version>${assertj.version}</version><scope>test</scope></dependency>
+ </dependencies>
+ <build>
+  <resources>
+   <resource><directory>src/main/resources</directory></resource>
+   <resource><directory>${project.basedir}/../orchestrator-svc/target/classes</directory><includes><include>META-INF/pipeline/**</include></includes></resource>
+  </resources>
+  <plugins>
+   <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><configuration><proc>none</proc></configuration></plugin>
+   <plugin><groupId>io.quarkus</groupId><artifactId>quarkus-maven-plugin</artifactId></plugin>
+   <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId></plugin>
+  </plugins>
+ </build>
+</project>
