@@ -161,9 +161,14 @@ class WorkerProof:
         self.save('business-native-lineage', completed_execution_lineage(admitted, executions))
         objects=self.aws('s3api','list-objects-v2','--bucket','csv-payments-output').get('Contents',[])
         self.save('business-s3-inventory', objects)
-        assert len(objects)==2,objects
+        staged=[obj for obj in objects if obj['Key'].startswith('processed/.tpf-pages/')]
+        final=[obj for obj in objects if obj not in staged]
+        expected_stage_roots={hashlib.sha256(item['execution_id']['S'].encode()).hexdigest() for item in admitted['Items']}
+        assert len(staged)==2 and {obj['Key'].split('/')[2] for obj in staged}==expected_stage_roots, staged
+        assert all(obj['Key'].endswith('/page-00000000000000000000.part') for obj in staged), staged
+        assert len(final)==2, {'failure':'Expected two final CSV objects, not staged page bodies','inventory':objects}
         outputs=[]
-        for obj in objects:
+        for obj in final:
             text=self.run(['docker','compose','-f',str(self.root/'self-host/container/compose.finite-proof.yaml'),'exec','-T','localstack','awslocal','s3','cp','s3://csv-payments-output/'+obj['Key'],'-'])
             self.save('business-s3-object-'+str(len(outputs)), {'key':obj['Key'],'rawUtf8':text,'sha256':hashlib.sha256(text.encode()).hexdigest()})
             rows=list(csv.DictReader(io.StringIO(text),quotechar="'"));assert len(rows)==1,rows
