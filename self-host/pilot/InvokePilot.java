@@ -10,6 +10,24 @@ import org.pipelineframework.aws.durable.model.*;
 
 /** Synthetic AWS event delivery only; semantic admission uses published native actions/stores. */
 public class InvokePilot {
+ private static void inject(Object bean,String name,Object value) throws Exception {
+  var field=bean.getClass().getDeclaredField(name);field.setAccessible(true);field.set(bean,value);
+ }
+ private static com.amazonaws.services.lambda.runtime.events.SQSEvent sqsEvent(com.fasterxml.jackson.databind.JsonNode input) throws Exception {
+  // AWS's serializer maps "Records" / "eventSourceARN" to Java bean names.
+  // Adapt only event fields here; PipelineJson stays strict for pipeline values.
+  if(input==null || !input.isObject() || !input.path("Records").isArray())
+   throw new IllegalArgumentException("Fixture SQS event requires a Records array");
+  var eventObject=(com.fasterxml.jackson.databind.node.ObjectNode)input.deepCopy();
+  eventObject.set("records",eventObject.remove("Records"));
+  for(var record:eventObject.path("records")) {
+   if(!record.isObject() || !record.path("eventSourceARN").isTextual())
+    throw new IllegalArgumentException("Fixture SQS record requires eventSourceARN");
+   var object=(com.fasterxml.jackson.databind.node.ObjectNode)record;
+   object.set("eventSourceArn",object.remove("eventSourceARN"));
+  }
+  return PipelineJson.mapper().treeToValue(eventObject,com.amazonaws.services.lambda.runtime.events.SQSEvent.class);
+ }
  public static void main(String[] args) throws Exception {
   Context context=(Context)Proxy.newProxyInstance(Context.class.getClassLoader(),new Class[]{Context.class},
    (p,m,a)-> { if(m.getReturnType()==String.class)return "local-pilot-event";if(m.getReturnType()==int.class)return 60000;return null; });
@@ -37,6 +55,23 @@ public class InvokePilot {
     } catch(Exception failure) {
      result=PipelineJson.mapper().writeValueAsString(java.util.Map.of("parsed",false,"type",failure.getClass().getName(),"message",failure.getMessage()));
     }
+   } else if(command.has("nativeWork") || command.has("nativeCompletion")) {
+    // Fixture supplies only SQS event delivery and CDI injection. Published handlers own processing.
+    var service=io.quarkus.arc.Arc.container().instance(org.pipelineframework.PipelineExecutionService.class).get();
+    var event=sqsEvent(command.get(command.has("nativeWork") ? "nativeWork" : "nativeCompletion"));
+    Object action; Object nativeHandler;
+    if(command.has("nativeWork")) {
+     action=new org.pipelineframework.orchestrator.SqsWorkItemAction();
+     inject(action,"pipelineExecutionService",service);
+     nativeHandler=new AwsDurableWorkItemHandler();
+    } else {
+     action=new org.pipelineframework.awaitable.sqs.SqsAwaitCompletionAction();
+     inject(action,"executionService",service);
+     nativeHandler=new AwsDurableAwaitCompletionHandler();
+    }
+    inject(nativeHandler,"action",action);
+    @SuppressWarnings("unchecked") var batch=(com.amazonaws.services.lambda.runtime.RequestHandler<com.amazonaws.services.lambda.runtime.events.SQSEvent,com.amazonaws.services.lambda.runtime.events.SQSBatchResponse>)nativeHandler;
+    result=PipelineJson.mapper().writeValueAsString(batch.handleRequest(event,context));
    } else if(command.has("nativeSubmit")) {
     var submitted=PipelineJson.mapper().treeToValue(command.get("nativeSubmit"),AwsDurableExecutionInput.class);
     var control=io.quarkus.arc.Arc.container().instance(org.pipelineframework.orchestrator.PipelineControlPlane.class).get();
@@ -44,6 +79,8 @@ public class InvokePilot {
       .endpointOverride(java.net.URI.create(System.getenv("AWS_ENDPOINT_URL_DYNAMODB")))
       .region(software.amazon.awssdk.regions.Region.US_EAST_1).build()) {
      var actions=new AwsDurableControlPlaneActions(control,new AwsDurableCallbackBindingRepository(dynamo,"local-unused-callback-bindings"),
+      // Fixture-only decoder for this NATIVE package. The AWS_DURABLE package separately
+      // proves its generated AwsDurableInputDecoder against the strict published codec.
       json -> {try{return PipelineJson.mapper().readValue(json,org.pipelineframework.csv.domain.CsvPaymentsInputFile.class);}catch(Exception e){throw new IllegalArgumentException(e);}},
       PipelineJson.mapper(),Duration.ofSeconds(20),Duration.ofDays(90));
      result=PipelineJson.mapper().writeValueAsString(actions.invoke(AwsDurableActionRequest.submit(submitted)));
@@ -62,6 +99,7 @@ public class InvokePilot {
     }
    }
    } catch(Exception failure) {
+    failure.printStackTrace(System.out);
     result=PipelineJson.mapper().writeValueAsString(java.util.Map.of("fixtureCommandFailed",true,
       "type",failure.getClass().getName(),"message",String.valueOf(failure.getMessage())));
    }

@@ -28,12 +28,12 @@ The output is `durable-action-lambda-svc/target/function.zip`. Build the HTTP
 ingress with the ordinary `NATIVE` coordination selection separately; each
 package consumes its own producer's generated classes and metadata.
 
-For REST orchestration the first generated client step takes a
-`CsvPaymentsInputFileDto`. The existing generated Durable decoder correctly
-returns that DTO. Its generated REST mapper restores the canonical domain value
-at the service boundary. Do not replace this decoder with a domain-only decoder
-based on the earlier local admission fixture: that fixture did not execute the
-REST worker path.
+Canonical values are retained through durable state and the generated client step.
+The corrected compiler maps to REST DTOs only at the HTTP boundary. The generated
+Durable decoder restores the canonical input; its test checks both the actual
+client-step signature and a round trip through the published strict durable codec.
+The prior DTO-only seam assertion did not exercise durable persistence and is
+superseded by the worker integration regression.
 
 Verification exercises the emitted decoder against the actual generated first
 step's input type and the canonical mapper, and Quarkus packages and validates

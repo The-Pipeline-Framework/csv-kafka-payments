@@ -56,3 +56,7 @@ python3 self-host/pilot/run-local-proof.py --probe-part-limit \
 ```
 
 The external host JAR is a verified normal public artifact, outside the production HTTP Lambda package to preserve handler separation. The proof pins its bytes and refuses Python optimization. It owns one local fixture lane on ports 4597, 8197 and 8198, sanitizes AWS/runtime environment variables and uses dummy credentials with loopback endpoints only. It refuses an existing lane and cleans up its own containers/volumes. Local Release bootstrap calls the unchanged native admin service in-process; every admin HTTP route is blocked with pilot admission disabled or enabled. `target/pilot-local-proof/` retains the result, native records, provider fixture outcomes and before/after process logs. IAM event delivery and Lambda provider history are explicit fixtures: this is local native admission/restart evidence, not live authentication, provider replay, business completion or Cloud ACTIVE.
+
+## Worker/result continuation
+
+The cohesive local integration is reproduced in [worker packaging and S3 proof](../../worker-lambda-svc/README.md). `--execute-workers` extends the existing admission/restart proof with real generated REST resources, the existing provider and published native work/Await handlers. It may report business completion only after native SUCCEEDED state and the corresponding S3 CSV records are verified. AWS identity/event delivery and provider history remain explicit fixtures; remote acceptance and native preflight are unchanged.

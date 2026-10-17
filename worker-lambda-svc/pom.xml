@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+ <modelVersion>4.0.0</modelVersion>
+ <parent><groupId>org.pipelineframework.csv</groupId><artifactId>csv-payments-parent</artifactId><version>26.9.4-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+ <artifactId>worker-lambda-svc</artifactId><name>CSV IAM-protected generated payment workers</name>
+ <dependencies>
+  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>pipeline-runtime-svc</artifactId><version>${project.version}</version></dependency>
+  <!-- Generated HTTP surface is an existing producer classifier, emitted after its main index. -->
+  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>pipeline-runtime-svc</artifactId><version>${project.version}</version><classifier>pipeline-server</classifier></dependency>
+  <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-amazon-lambda-http</artifactId></dependency>
+  <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
+  <dependency><groupId>org.mockito</groupId><artifactId>mockito-core</artifactId><scope>test</scope></dependency>
+  <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><version>${assertj.version}</version><scope>test</scope></dependency>
+ </dependencies>
+ <build>
+  <resources>
+   <resource><directory>src/main/resources</directory></resource>
+   <!-- Consume the producer's exact Compiled Truth, as the existing monolith packaging does. -->
+   <resource><directory>${project.basedir}/../pipeline-runtime-svc/target/classes</directory><includes><include>META-INF/pipeline/**</include></includes></resource>
+  </resources>
+  <plugins>
+   <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><configuration><proc>none</proc></configuration></plugin>
+   <plugin><groupId>io.quarkus</groupId><artifactId>quarkus-maven-plugin</artifactId></plugin>
+   <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId></plugin>
+  </plugins>
+ </build>
+</project>

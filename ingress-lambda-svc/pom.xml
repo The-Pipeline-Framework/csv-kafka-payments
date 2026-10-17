@@ -7,6 +7,8 @@
   <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version></dependency>
   <!-- Generated HTTP surface is an existing producer classifier, emitted after its main index. -->
   <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>pipeline-server</classifier></dependency>
+  <!-- Main indexing precedes role compilation; include the emitted client beans explicitly. -->
+  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>orchestrator-client</classifier></dependency>
   <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-aws-durable-coordination-model</artifactId></dependency>
   <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-amazon-lambda-http</artifactId></dependency>
   <dependency><groupId>software.amazon.awssdk</groupId><artifactId>lambda</artifactId></dependency>
