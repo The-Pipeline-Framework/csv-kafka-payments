@@ -54,3 +54,16 @@ PY
 python3 self-host/pilot/run-local-proof.py --execute-workers --probe-part-limit \
   --host-jar "$pilot_repo/target/pilot-published-host.jar" \
   --host-sha256 "$TPF_PILOT_HOST_FIXTURE_SHA256"
+
+# The coordinated smoke gate also exercises the native decoder/strict-codec seam.
+# Generate this variant after the worker proof so it cannot replace its metadata.
+./build-pipeline-runtime.sh \
+  -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc \
+  -DskipTests -DskipITs=true -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.coordination.host=AWS_DURABLE -Dtpf.build.function.http-bridge=false \
+  -Dtpf.build.lambda.scope=compile -Dquarkus.container-image.build=false \
+  -Dtpf.await.kafka.reactive-messaging.enabled=false \
+  -Dcsv-payments.payment-provider.enabled=false \
+  -Dcsv-payments.payment-provider-sqs.enabled=true "${args[@]}"
+./mvnw -B -ntp -f durable-action-lambda-svc/pom.xml clean verify \
+  -Dquarkus.container-image.build=false "${args[@]}"
