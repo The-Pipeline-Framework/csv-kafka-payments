@@ -9,6 +9,32 @@ def cleanup_all(actions):
         except Exception as failure:errors.append(f'{label}: {type(failure).__name__}: {failure}')
     return errors
 
+def completed_execution_lineage(admitted, completed):
+    """Require the two original invocations and exactly one native Await item child each."""
+    roots = {item['execution_id']['S']: item for item in admitted['Items']}
+    records = {item['execution_id']['S']: item for item in completed['Items']}
+    assert len(roots) == 2 and len(records) == len(completed['Items']) == 4, 'Unexpected native admission/child count'
+    assert set(roots).issubset(records), 'An admitted root execution is missing'
+    assert all(item['status']['S'] == 'SUCCEEDED' for item in records.values()), 'Native execution did not succeed'
+    children = {identity: item for identity, item in records.items() if identity not in roots}
+    lineage = []
+    for identity, original in roots.items():
+        root = records[identity]
+        for field in ('execution_key', 'tenant_id', 'pipeline_id', 'release_version', 'contract_version', 'initial_input_payload_digest'):
+            assert root[field] == original[field], (identity, 'admitted identity changed', field)
+        # Published runtime61 ItemContinuationKey.executionKey defines this child namespace.
+        prefix = original['execution_key']['S'] + ':await-item:'
+        linked = [(child_id, child) for child_id, child in children.items()
+                  if child['execution_key']['S'].startswith(prefix) and child['execution_key']['S'].endswith(':0')]
+        assert len(linked) == 1, (identity, 'Expected exactly one native Await item child')
+        child_id, child = linked[0]
+        for field in ('tenant_id', 'pipeline_id', 'release_version', 'contract_version'):
+            assert child[field] == root[field], (child_id, 'child scope changed', field)
+        assert root['page_completion_consumed_records']['N'] == '1' and root['page_completion_exhausted']['BOOL'], root
+        lineage.append({'admittedExecutionId': identity, 'awaitChildExecutionId': child_id, 'status': 'SUCCEEDED'})
+    assert len({item['awaitChildExecutionId'] for item in lineage}) == 2, 'Await child reused between roots'
+    return lineage
+
 class WorkerProof:
     def __init__(self, root, evidence, java, env, run, aws, save, coordinator_props):
         self.root,self.evidence,self.java,self.env,self.run,self.aws,self.save=root,evidence,java,env,run,aws,save
@@ -115,6 +141,8 @@ class WorkerProof:
 
     def finish(self,command):
         self.check_access()
+        admitted=self.aws('dynamodb','scan','--table-name','tpf_execution','--consistent-read')
+        assert len(admitted.get('Items',[])) == 2, 'Expected exactly two admitted roots before delivery'
         delivered={'work':0,'provider':0,'completion':0};deadline=time.monotonic()+180
         executions={'Items':[]};states=[]
         while time.monotonic()<deadline:
@@ -129,12 +157,15 @@ class WorkerProof:
                 for item in executions.get('Items',[])]
             time.sleep(.2)
         self.save('business-executions',executions)
-        assert len(states)==2 and states==['SUCCEEDED']*2,f'Business completion deadline (180 seconds) expired; expected two SUCCEEDED executions, observed {states}'
+        assert states and all(state == 'SUCCEEDED' for state in states),f'Business completion deadline (180 seconds) expired; observed {states}'
+        self.save('business-native-lineage', completed_execution_lineage(admitted, executions))
         objects=self.aws('s3api','list-objects-v2','--bucket','csv-payments-output').get('Contents',[])
+        self.save('business-s3-inventory', objects)
         assert len(objects)==2,objects
         outputs=[]
         for obj in objects:
             text=self.run(['docker','compose','-f',str(self.root/'self-host/container/compose.finite-proof.yaml'),'exec','-T','localstack','awslocal','s3','cp','s3://csv-payments-output/'+obj['Key'],'-'])
+            self.save('business-s3-object-'+str(len(outputs)), {'key':obj['Key'],'rawUtf8':text,'sha256':hashlib.sha256(text.encode()).hexdigest()})
             rows=list(csv.DictReader(io.StringIO(text),quotechar="'"));assert len(rows)==1,rows
             outputs.append({'key':obj['Key'],'sha256':hashlib.sha256(text.encode()).hexdigest(),'rows':rows})
         self.save('business-s3-results',outputs)
