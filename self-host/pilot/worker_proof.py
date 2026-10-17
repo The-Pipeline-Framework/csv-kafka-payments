@@ -1,6 +1,11 @@
 """External Lambda/SQS delivery fixtures. All workflow decisions remain in published TPF."""
 import base64, csv, decimal, hashlib, http.server, io, json, pathlib, queue, shutil, subprocess, threading, time, zipfile
 
+INVOCATION_TIMEOUT_SECONDS = 90
+# A received batch stays hidden for its single bounded invocation plus deletion overhead.
+SQS_BATCH_ACK_MARGIN_SECONDS = 30
+SQS_VISIBILITY_TIMEOUT_SECONDS = INVOCATION_TIMEOUT_SECONDS + SQS_BATCH_ACK_MARGIN_SECONDS
+
 def cleanup_all(actions):
     """Attempt every fixture cleanup, returning failures without replacing the triggering error."""
     errors=[]
@@ -107,7 +112,7 @@ class WorkerProof:
         process,responses=target
         if process.poll() is not None:raise RuntimeError('Packaged function exited; see worker/provider function log')
         process.stdin.write(json.dumps(event)+'\n');process.stdin.flush()
-        try:return responses.get(timeout=90)
+        try:return responses.get(timeout=INVOCATION_TIMEOUT_SECONDS)
         except queue.Empty:raise RuntimeError('Packaged function failed; see worker/provider function log')
 
     def http(self,path,body,identity='worker'):
@@ -117,7 +122,7 @@ class WorkerProof:
 
     def batch(self,queue_name,invoke):
         url='http://127.0.0.1:4597/000000000000/'+queue_name
-        messages=self.aws('sqs','receive-message','--queue-url',url,'--max-number-of-messages','10','--visibility-timeout','30').get('Messages',[])
+        messages=self.aws('sqs','receive-message','--queue-url',url,'--max-number-of-messages','10','--visibility-timeout',str(SQS_VISIBILITY_TIMEOUT_SECONDS)).get('Messages',[])
         if not messages:return 0
         event={'Records':[{'messageId':m['MessageId'],'body':m['Body'],'eventSource':'aws:sqs','eventSourceARN':'arn:aws:sqs:us-east-1:000000000000:'+queue_name,'awsRegion':'us-east-1','attributes':{},'messageAttributes':{}} for m in messages]}
         result=invoke(event);failed={x['itemIdentifier'] for x in result.get('batchItemFailures',[])}

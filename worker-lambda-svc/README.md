@@ -2,23 +2,10 @@
 
 This standalone package hosts the existing grouped runtime and compiler-generated REST resources. It adds no workflow, SQS consumer or infrastructure implementation. The first burn uses S3 input/results and native semantic state, without SQL history. Ordinary application topology and TLS validation remain intact.
 
-Build with JDK 21 and normal published TPF dependencies:
+Build and run the complete local proof from the repository root with JDK 21, Docker Compose and normal published TPF dependencies. This entrypoint selects the existing pinned host JAR and verifies its SHA-256 before invoking the proof:
 
 ```sh
-export PIPELINE_CONFIG="$PWD/config/pipeline.pilot.yaml" PIPELINE_TRANSPORT=REST
-./build-pipeline-runtime.sh \
-  -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc \
-  -DskipTests -DskipITs=true -Dtpf.build.platform=FUNCTION \
-  -Dtpf.build.function.http-bridge=true -Dtpf.build.lambda.scope=compile \
-  -Dquarkus.container-image.build=false \
-  -Dtpf.await.kafka.reactive-messaging.enabled=false \
-  -Dcsv-payments.payment-provider.enabled=false \
-  -Dcsv-payments.payment-provider-sqs.enabled=true
-for module in ingress-lambda-svc worker-lambda-svc provider-lambda-svc; do
-  ./mvnw -B -ntp -f "$module/pom.xml" clean verify \
-    -Dquarkus.container-image.build=false -Dmaven.repo.local="$PWD/.m2/repository"
-done
-python3 self-host/pilot/run-local-proof.py --execute-workers --probe-part-limit
+bash self-host/pilot/build-and-prove.sh
 ```
 
 Cloud must supply the actual IAM account and caller ARN in `csv.worker.account-id` and `csv.worker.principal-arn`. They are deployment inputs, never caller headers. Bind the exact identity AWS delivers for the invoking role/session; do not guess a role ARN or broaden matching to an arbitrary prefix. Missing bindings fail closed. Only authenticated POST operation routes are exposed. Cloud must also restrict the Function URL policy to the authorized caller and use authenticated transport; this package does not implement a REST client SigV4 signer. Search's public `NONE` Function URL policy is not suitable for this pilot.
