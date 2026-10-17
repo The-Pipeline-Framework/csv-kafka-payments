@@ -32,7 +32,8 @@ import org.pipelineframework.repository.PayloadReference;
 
 class S3PagedCsvReaderTest {
   private static final String KEY = "incoming/8d30325f-4980-42df-93d4-256759760431.csv";
-  private static final Path LOGICAL_PATH = Path.of("s3", "csv-payments-input", KEY);
+  // A virtual absolute path prevents Jackson from resolving this identity against the process directory.
+  private static final Path LOGICAL_PATH = Path.of("/s3", "csv-payments-input", KEY);
   private static final byte[] CONTENT = ("ID,Recipient,Amount,Currency\r\n"
       + "first,María,1.00,EUR\r\n"
       + "second,Zoë,2.00,USD\r\n"
@@ -41,7 +42,13 @@ class S3PagedCsvReaderTest {
   @Test
   void reopensEveryPageWithStableLogicalIdentityAndClosesEachSession() throws Exception {
     var fixture = new Sessions(CONTENT);
-    var input = input("etag-one", CONTENT.length);
+    // REST serializes Path as a URI; the virtual identity must survive that actual wire codec.
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+    var original = input("etag-one", CONTENT.length);
+    var restoredPath = json.readValue(json.writeValueAsBytes(original.filepath()), Path.class);
+    var restoredFolder = json.readValue(json.writeValueAsBytes(original.csvFolderPath()), Path.class);
+    var input = new CsvPaymentsInputFile(restoredPath, restoredFolder,
+        original.sourceIdentity(), original.contentRef());
     Optional<String> checkpoint = Optional.empty();
     List<PaymentRecord> rows = new ArrayList<>();
     int pages = 0;
@@ -93,6 +100,20 @@ class S3PagedCsvReaderTest {
         input("etag-one", 1024L * 1024 + 1), "run-one", Optional.empty(), 1)));
     assertEquals(opened, fixture.opened.get());
     assertEquals(fixture.opened.get(), fixture.closed.get());
+  }
+
+  @Test
+  void forgedLogicalPathFailsBeforeOpeningSessions() {
+    var fixture = new Sessions(CONTENT);
+    var original = input("etag-one", CONTENT.length);
+    var forgedPath = Path.of("/s3", "foreign-bucket", KEY);
+    var forged = new CsvPaymentsInputFile(forgedPath, forgedPath.getParent(),
+        original.sourceIdentity(), original.contentRef());
+
+    assertThrows(IllegalArgumentException.class, () ->
+        new OpenCsvPagedPaymentSource(fixture::open).open(new PagedSourceRequest<>(
+            forged, "run-one", Optional.empty(), 1)));
+    assertEquals(0, fixture.opened.get());
   }
 
   @Test
@@ -184,7 +205,7 @@ class S3PagedCsvReaderTest {
   }
 
   private static CsvPaymentsInputFile inputWithKey(String key, String etag, long size) {
-    Path logicalPath = Path.of("s3", "csv-payments-input", key);
+    Path logicalPath = Path.of("/s3", "csv-payments-input", key);
     var origin = new ConnectorPayloadOrigin(
         ConnectorBindingName.of("csv-input-s3"),
         new ConnectorOperationIdentity(

@@ -55,6 +55,10 @@ python3 self-host/pilot/run-local-proof.py --execute-workers --probe-part-limit 
   --host-jar "$pilot_repo/target/pilot-published-host.jar" \
   --host-sha256 "$TPF_PILOT_HOST_FIXTURE_SHA256"
 
+# Retain the compiled metadata from the variant that produced the proven ZIPs.
+mkdir -p target/pilot-local-proof/worker-variant
+cp -R orchestrator-svc/target/classes/META-INF/pipeline target/pilot-local-proof/worker-variant/
+
 # The coordinated smoke gate also exercises the native decoder/strict-codec seam.
 # Generate this variant after the worker proof so it cannot replace its metadata.
 ./build-pipeline-runtime.sh \

@@ -30,6 +30,7 @@ import com.opencsv.CSVReaderBuilder;
 import org.pipelineframework.csv.common.domain.CsvPaymentsStableIdSupport;
 import org.pipelineframework.csv.common.domain.FilePathAwareMappingStrategy;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.common.mapper.CsvPaymentFileObjectMapper;
 import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.paging.PagedSourceCompletion;
 import org.pipelineframework.paging.PagedSourceRequest;
@@ -315,7 +316,7 @@ final class OpenCsvPagedPaymentSource {
       PayloadReference reference = input.contentRef().asOptional().orElseThrow();
       if (!"s3".equals(reference.provider()) || !snapshotIdentity.equals(reference.checksum())
           || reference.sizeBytes() < 0
-          || !input.filepath().equals(Path.of("s3", reference.container(), reference.key()))) {
+          || !input.filepath().equals(CsvPaymentFileObjectMapper.logicalS3Path(reference.container(), reference.key()))) {
         throw new IllegalArgumentException("Pinned CSV object reference does not match its source identity");
       }
       if (reference.sizeBytes() > MAX_S3_CSV_BYTES) {

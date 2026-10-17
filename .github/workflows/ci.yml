@@ -98,7 +98,7 @@ jobs:
             worker-lambda-svc/target/surefire-reports/TEST-*.xml
             provider-lambda-svc/target/surefire-reports/TEST-*.xml
             ingress-lambda-svc/target/surefire-reports/TEST-*.xml
-            orchestrator-svc/target/classes/META-INF/pipeline/
+            target/pilot-local-proof/worker-variant/pipeline/
           if-no-files-found: error
           retention-days: 7
 

@@ -25,10 +25,35 @@ class CsvPaymentFileObjectMapperTest {
   void mapsBindingOwnedS3ReferenceWithoutLocalPath() {
     var input = mapper.map(snapshot(KEY, reference(KEY, true)));
 
-    assertEquals(Path.of("s3", "csv-payments-input", KEY), input.filepath());
-    assertEquals(Path.of("s3", "csv-payments-input", "incoming"), input.csvFolderPath());
+    assertEquals(Path.of("/s3", "csv-payments-input", KEY), input.filepath());
+    assertEquals(Path.of("/s3", "csv-payments-input", "incoming"), input.csvFolderPath());
     assertEquals("etag-one", input.sourceIdentity());
     assertTrue(input.contentRef().asOptional().isPresent());
+  }
+
+  @Test
+  void preservesS3IdentityAndOwnedReferenceAcrossCanonicalAndRestJson() throws Exception {
+    var reference = reference(KEY, true);
+    var input = mapper.map(snapshot(KEY, reference));
+    var json = org.pipelineframework.config.pipeline.PipelineJson.mapper();
+    var durableRestored = json.readValue(json.writeValueAsBytes(input),
+        org.pipelineframework.csv.domain.CsvPaymentsInputFile.class);
+    // The REST boundary uses Jackson's standard Path URI codec, unlike PipelineJson's module.
+    var restJson = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+    var restoredPath = restJson.readValue(restJson.writeValueAsBytes(durableRestored.filepath()), Path.class);
+    var restoredFolder = restJson.readValue(restJson.writeValueAsBytes(durableRestored.csvFolderPath()), Path.class);
+    var restored = new org.pipelineframework.csv.domain.CsvPaymentsInputFile(
+        restoredPath, restoredFolder, durableRestored.sourceIdentity(), durableRestored.contentRef());
+
+    assertEquals(input, durableRestored);
+    assertTrue(input.filepath().isAbsolute());
+    assertEquals(input.filepath(), restored.filepath());
+    assertEquals(input.csvFolderPath(), restored.csvFolderPath());
+    assertEquals(input.sourceIdentity(), restored.sourceIdentity());
+    var restoredReference = restored.contentRef().asOptional().orElseThrow();
+    assertEquals(reference, restoredReference);
+    assertEquals("etag-one", restoredReference.checksum());
+    assertEquals(reference.connectorOrigin(), restoredReference.connectorOrigin());
   }
 
   @Test

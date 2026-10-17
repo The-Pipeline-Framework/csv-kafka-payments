@@ -32,9 +32,12 @@ class DurableCompositionTest {
         assertThat(canonical.contentRef().isAbsent()).isTrue();
         // The same decoded value must survive the actual release-bound durable codec.
         try (var stream = getClass().getResourceAsStream("/META-INF/pipeline/pipeline-contract.json")) {
+            assertThat(stream).as("Actual producer contract is packaged").isNotNull();
             var contract = PipelineJson.mapper().readTree(stream);
             var definition = contract.path("canonicalTypes").path("CsvPaymentsInputFile");
             assertThat(definition.path("runtimeClass").asText()).isEqualTo(CsvPaymentsInputFile.class.getName());
+            assertThat(definition.path("definitionFingerprint").asText()).as("Canonical type fingerprint is present").isNotBlank();
+            assertThat(contract.path("canonicalCatalogFingerprint").asText()).as("Canonical catalog fingerprint is present").isNotBlank();
             var binding = new CanonicalPayloadBinding("CsvPaymentsInputFile",
                 definition.path("definitionFingerprint").asText(),
                 contract.path("canonicalCatalogFingerprint").asText(), CsvPaymentsInputFile.class,

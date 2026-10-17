@@ -33,7 +33,7 @@ Remote integration still requires Cloud's actual immutable artifacts, ingress/co
 
 ## Reproduce without AWS credentials
 
-Use JDK 21, Docker Compose and the normal public dependency repositories. Every Maven command uses this checkout's `.m2/repository`. The CI `Verify FUNCTION upload ingress` job records the producer build and adapter tests; it does not deploy resources or run live AWS acceptance.
+Use JDK 21, Docker Compose and the normal public dependency repositories. Every Maven command uses this checkout's `.m2/repository`. The CI `Verify FUNCTION upload, workers and S3 result` job runs `self-host/pilot/build-and-prove.sh`: producer/package builds and adapter tests, followed by the local admission/restart, worker execution and verified S3 result proof. It then verifies the native decoder/strict-codec package. AWS delivery and provider history remain fixtures; the job does not deploy AWS resources or run live AWS acceptance.
 
 ```sh
 export PIPELINE_CONFIG="$PWD/config/pipeline.pilot.yaml" PIPELINE_TRANSPORT=REST
