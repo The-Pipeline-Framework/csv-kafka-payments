@@ -6,6 +6,8 @@
  <dependencies>
   <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version></dependency>
   <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>pipeline-server</classifier></dependency>
+  <!-- Main indexing precedes role compilation; include the emitted client beans explicitly. -->
+  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>orchestrator-client</classifier></dependency>
   <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-aws-durable-coordination-host</artifactId></dependency>
   <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-amazon-lambda</artifactId></dependency>
   <dependency><groupId>io.quarkiverse.amazonservices</groupId><artifactId>quarkus-amazon-dynamodb</artifactId></dependency>

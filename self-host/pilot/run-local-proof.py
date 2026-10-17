@@ -2,9 +2,12 @@
 """No real AWS: packaged HTTP IAM adapter + pinned native Durable ingress/actions + local S3/Dynamo.
 AWS event identity delivery and Lambda provider behavior are explicit external fixtures, not IAM/replay certification.
 """
+import sys
+from worker_proof import cleanup_all
 import argparse, fcntl, tempfile, base64, concurrent.futures, datetime, hashlib, http.server, json, os, pathlib, queue, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, zipfile
 if not __debug__:raise RuntimeError('This evidence proof requires assertions; remove Python -O/PYTHONOPTIMIZE')
-parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--uploads-only',action='store_true',help='Independent upload proof; never claims Durable admission/replay');parser.add_argument('--probe-part-limit',action='store_true',help='Local-only bounded two-MiB part probe, then restore the declared part');parser.add_argument('--host-jar',type=pathlib.Path,help='Exact published native host JAR for this qualification');parser.add_argument('--host-sha256',help='Expected host digest from the publication or compatibility receipt');args=parser.parse_args()
+parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--uploads-only',action='store_true',help='Independent upload proof; never claims Durable admission/replay');parser.add_argument('--probe-part-limit',action='store_true',help='Local-only bounded two-MiB part probe, then restore the declared part');parser.add_argument('--host-jar',type=pathlib.Path,help='Exact published native host JAR for this qualification');parser.add_argument('--host-sha256',help='Expected host digest from the publication or compatibility receipt');parser.add_argument('--execute-workers',action='store_true',help='Execute packaged REST workers and payment provider with native SQS handlers; external delivery remains a fixture');args=parser.parse_args()
+if args.execute_workers and args.uploads_only:parser.error('--execute-workers requires native admission')
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 java_home=os.environ.get('JAVA_HOME');javac=shutil.which('javac')
 if not java_home and not javac:raise RuntimeError('A JDK 21 installation is required; set JAVA_HOME')
@@ -36,6 +39,7 @@ lane_fd=os.open(lock_path,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
 try:fcntl.flock(lane_fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
 except BlockingIOError:raise RuntimeError('Another CSV native proof owns the local evidence lane')
 assert not run(COMPOSE+['ps','--quiet']).strip(),'Existing proof container; refuse takeover'
+(EVIDENCE/'result.json').unlink(missing_ok=True)
 java_version=subprocess.run([str(JAVA/'java'),'-version'],text=True,capture_output=True,check=True)
 assert 'version "21.' in java_version.stderr,'Set JAVA_HOME to JDK 21 for the pinned proof'
 if UNPACK.exists():shutil.rmtree(UNPACK)
@@ -70,7 +74,7 @@ class LambdaFixture(http.server.BaseHTTPRequestHandler):
   if status==409:self.send_header('x-amzn-ErrorType','DurableExecutionAlreadyStartedException')
   self.send_header('Content-Length',str(len(value)));self.end_headers();self.wfile.write(value)
 server=http.server.ThreadingHTTPServer(('127.0.0.1',8198),LambdaFixture);threading.Thread(target=server.serve_forever,daemon=True).start()
-process=None;lines=None;logs=[]
+process=None;lines=None;logs=[];workers=None
 def start(label):
  global process,lines
  lines=queue.Queue();f=(EVIDENCE/(label+'.log')).open('w');logs.append(f)
@@ -122,6 +126,10 @@ try:
  for bucket in ('csv-payments-input','csv-payments-output'):aws('s3api','create-bucket','--bucket',bucket)
  start('setup')
  # Initialize actual packaged runtime; no admin endpoint is exposed over HTTP, even during bootstrap.
+ if args.execute_workers:
+  from worker_proof import WorkerProof
+  workers=WorkerProof(ROOT,EVIDENCE,JAVA,ENV,run,aws,save,props)
+  stop();start('worker-bound-ingress')
  require_status('pilot-disabled',call('/pilot/uploads',{}),503)
  require_status('disabled-admin-blocked',call('/tpf/admin/tenants/pilot-tenant/pipelines/x/releases/register',{}),403)
  if not args.uploads_only:
@@ -197,10 +205,30 @@ try:
  after=save('after-restart-executions',aws('dynamodb','scan','--table-name','tpf_execution','--consistent-read'))
  assert sorted(before['Items'],key=lambda x:json.dumps(x,sort_keys=True))==sorted(after['Items'],key=lambda x:json.dumps(x,sort_keys=True))
  assert len(provider)==len(set(names.values()))==(0 if args.uploads_only else 2)
+ if workers:
+  try:workers.finish(command)
+  except Exception:
+   try:save('business-executions',aws('dynamodb','scan','--table-name','tpf_execution','--consistent-read'))
+   except Exception as diagnostic:print('Business failure diagnostic could not be collected: '+str(diagnostic))
+   raise
  save('provider-outcomes',provider_calls)
- save('result',{'status':'PASSED_UPLOADS_ONLY' if args.uploads_only else 'PASSED','localNativeDurableAdmissionProven':not args.uploads_only,'liveAwsDurableInvocationProven':False,'applicationBase':run(['git','rev-parse','HEAD']).strip(),'packageSha256':hashlib.sha256(ZIP.read_bytes()).hexdigest(),'nativeHostSha256':hashlib.sha256(HOST.read_bytes()).hexdigest(),'hostArtifactSource':'explicit pinned artifact; provenance in qualification receipt' if args.host_jar else 'normal public snapshot','nativeProviderNames':names,'actualNativeExecutionRecords':0 if args.uploads_only else 2,'restartRecordsUnchanged':True,'scope':('Uploads-only: packaged HTTP IAM adapter with synthetic authorizer events and native local S3; no native Durable ingress/action invoked.' if args.uploads_only else 'Packaged HTTP IAM adapter, published native ingress/starter and SUBMIT action with local Dynamo/S3; AWS identity and Lambda transport are fixtures. No live SigV4, Durable history/replay, business completion or Cloud ACTIVE.'),'cloudResourcesCreated':False})
+ save('result',{'status':'PASSED_UPLOADS_ONLY' if args.uploads_only else 'PASSED','localNativeDurableAdmissionProven':not args.uploads_only,'localWorkerBusinessResultProven':args.execute_workers,'liveAwsDurableInvocationProven':False,'applicationBase':run(['git','rev-parse','HEAD']).strip(),'packageSha256':hashlib.sha256(ZIP.read_bytes()).hexdigest(),'nativeHostSha256':hashlib.sha256(HOST.read_bytes()).hexdigest(),'hostArtifactSource':'explicit pinned artifact; provenance in qualification receipt' if args.host_jar else 'normal public snapshot','nativeProviderNames':names,'actualNativeExecutionRecords':0 if args.uploads_only else (4 if args.execute_workers else 2),'actualNativeRootExecutions':0 if args.uploads_only else 2,'actualNativeAwaitChildExecutions':2 if args.execute_workers else 0,'restartRecordsUnchanged':True,'scope':('Uploads-only: packaged HTTP IAM adapter with synthetic authorizer events and native local S3; no native Durable ingress/action invoked.' if args.uploads_only else 'Packaged HTTP IAM adapter, published native ingress/starter and SUBMIT action with local Dynamo/S3; AWS identity and Lambda transport are fixtures. '+('Worker business completion and S3 readback are proved locally. ' if args.execute_workers else 'Business completion remains unproved. ')+'No live SigV4, Durable history/replay or Cloud ACTIVE.'),'cloudResourcesCreated':False})
  print('PASS: uploads only; Durable invocation was not exercised' if args.uploads_only else 'PASS: authenticated native upload A/B, retries, native Durable ingress/action admission and hard process restart')
+except Exception as failure:
+ save('result',{'status':'FAILED','localWorkerBusinessResultProven':False,'requestedWorkerExecution':args.execute_workers,'failureType':type(failure).__name__,'failure':str(failure),'applicationBase':run(['git','rev-parse','HEAD']).strip(),'packageSha256':hashlib.sha256(ZIP.read_bytes()).hexdigest(),'nativeHostSha256':hashlib.sha256(HOST.read_bytes()).hexdigest(),'cloudResourcesCreated':False})
+ raise
 finally:
- stop();server.shutdown();server.server_close()
- for f in logs:f.close()
- if started:run(COMPOSE+['down','--volumes','--remove-orphans'])
+ original_failure=sys.exc_info()[0] is not None
+ cleanup_actions=[('ingress stop',stop),('Lambda fixture shutdown',server.shutdown),('Lambda fixture close',server.server_close)]
+ if workers:cleanup_actions.append(('worker fixture close',workers.close))
+ cleanup_actions.extend((f'ingress log {index} close',log.close) for index,log in enumerate(logs))
+ if started:cleanup_actions.append(('local fixture removal',lambda:run(COMPOSE+['down','--volumes','--remove-orphans'])))
+ cleanup_errors=cleanup_all(cleanup_actions)
+ if cleanup_errors:
+  print('Fixture cleanup failures: '+'; '.join(cleanup_errors))
+  try:
+   save('cleanup-failures',cleanup_errors)
+   if not original_failure:
+    result=json.loads((EVIDENCE/'result.json').read_text());result.update(status='FAILED_CLEANUP',cleanupFailures=cleanup_errors);save('result',result)
+  except Exception as diagnostic:print('Cleanup diagnostic could not be retained: '+str(diagnostic))
+  if not original_failure:raise RuntimeError('Fixture cleanup failed; see cleanup-failures.json')

@@ -47,17 +47,22 @@ public final class CsvPaymentFileObjectMapper implements ObjectSnapshotMapper<Cs
         if (etag == null || etag.isBlank() || !Objects.equals(etag, reference.checksum())) {
             throw new IllegalArgumentException("S3 snapshot requires a matching ETag for paging");
         }
-        String bucket = safeSegment(snapshot.container(), "bucket");
-        String key = Objects.requireNonNull(snapshot.key(), "S3 snapshot key must not be null");
+        Path logicalPath = logicalS3Path(snapshot.container(), snapshot.key());
+        return new CsvPaymentsInputFile(logicalPath, logicalPath.getParent(), etag,
+                org.pipelineframework.type.CanonicalFieldValue.of(reference));
+    }
+
+    /** Stable virtual identity across Path JSON round trips, independent of the process directory. */
+    public static Path logicalS3Path(String container, String objectKey) {
+        String bucket = safeSegment(container, "bucket");
+        String key = Objects.requireNonNull(objectKey, "S3 snapshot key must not be null");
         if (key.isBlank() || key.startsWith("/") || key.contains("\\") || key.chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("S3 snapshot key is not a safe logical path");
         }
         for (String segment : key.split("/", -1)) {
             safeSegment(segment, "key segment");
         }
-        Path logicalPath = Path.of("s3", bucket, key);
-        return new CsvPaymentsInputFile(logicalPath, logicalPath.getParent(), etag,
-                org.pipelineframework.type.CanonicalFieldValue.of(reference));
+        return Path.of("/s3", bucket, key);
     }
 
     private static String safeSegment(String value, String label) {

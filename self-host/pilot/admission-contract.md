@@ -33,7 +33,7 @@ Remote integration still requires Cloud's actual immutable artifacts, ingress/co
 
 ## Reproduce without AWS credentials
 
-Use JDK 21, Docker Compose and the normal public dependency repositories. Every Maven command uses this checkout's `.m2/repository`. The CI `Verify FUNCTION upload ingress` job records the producer build and adapter tests; it does not deploy resources or run live AWS acceptance.
+Use JDK 21, Docker Compose and the normal public dependency repositories. Every Maven command uses this checkout's `.m2/repository`. The CI `Verify FUNCTION upload, workers and S3 result` job runs `self-host/pilot/build-and-prove.sh`: producer/package builds and adapter tests, followed by the local admission/restart, worker execution and verified S3 result proof. It then verifies the native decoder/strict-codec package. AWS delivery and provider history remain fixtures; the job does not deploy AWS resources or run live AWS acceptance.
 
 ```sh
 export PIPELINE_CONFIG="$PWD/config/pipeline.pilot.yaml" PIPELINE_TRANSPORT=REST
@@ -56,3 +56,7 @@ python3 self-host/pilot/run-local-proof.py --probe-part-limit \
 ```
 
 The external host JAR is a verified normal public artifact, outside the production HTTP Lambda package to preserve handler separation. The proof pins its bytes and refuses Python optimization. It owns one local fixture lane on ports 4597, 8197 and 8198, sanitizes AWS/runtime environment variables and uses dummy credentials with loopback endpoints only. It refuses an existing lane and cleans up its own containers/volumes. Local Release bootstrap calls the unchanged native admin service in-process; every admin HTTP route is blocked with pilot admission disabled or enabled. `target/pilot-local-proof/` retains the result, native records, provider fixture outcomes and before/after process logs. IAM event delivery and Lambda provider history are explicit fixtures: this is local native admission/restart evidence, not live authentication, provider replay, business completion or Cloud ACTIVE.
+
+## Worker/result continuation
+
+The cohesive local integration is reproduced in [worker packaging and S3 proof](../../worker-lambda-svc/README.md). `--execute-workers` extends the existing admission/restart proof with real generated REST resources, the existing provider and published native work/Await handlers. It may report business completion only after native SUCCEEDED state and the corresponding S3 CSV records are verified. AWS identity/event delivery and provider history remain explicit fixtures; remote acceptance and native preflight are unchanged.

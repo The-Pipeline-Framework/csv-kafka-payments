@@ -28,6 +28,7 @@ EOF
 case "$suite" in
   smoke)
     ./mvnw -B install -Dquarkus.container-image.build=false --no-transfer-progress "${maven_args[@]}"
+    MAVEN_ARGS="${MAVEN_ARGS:-}" bash self-host/pilot/build-and-prove.sh
     ;;
   provider-reject)
     configure_testcontainers

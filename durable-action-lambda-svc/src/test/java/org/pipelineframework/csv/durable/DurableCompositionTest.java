@@ -4,9 +4,10 @@ import jakarta.inject.Named;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.aws.durable.AwsDurableActionGatewayHandler;
 import org.pipelineframework.aws.durable.AwsDurableInputDecoder;
-import org.pipelineframework.csv.dto.CsvPaymentsInputFileDto;
+import org.pipelineframework.csv.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.service.pipeline.ProcessCsvPaymentsInputRestClientStep;
-import org.pipelineframework.csv.transport.generated.CsvPaymentsInputFile_02ef56b89614RestMapper;
+import org.pipelineframework.orchestrator.CanonicalPayloadBinding;
+import org.pipelineframework.orchestrator.JsonDurablePayloadCodec;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,11 +25,27 @@ class DurableCompositionTest {
         mapper.setAccessible(true);
         mapper.set(decoder, PipelineJson.mapper());
         var decoded = decoder.decode("{\"filepath\":\"incoming/A.csv\",\"csvFolderPath\":\"incoming\",\"sourceIdentity\":\"object-A\"}");
-        assertThat(decoded).isInstanceOf(CsvPaymentsInputFileDto.class);
+        assertThat(decoded).isInstanceOf(CsvPaymentsInputFile.class);
         assertThat(ProcessCsvPaymentsInputRestClientStep.class.getMethod("applyOneToMany", decoded.getClass())).isNotNull();
-        var canonical = new CsvPaymentsInputFile_02ef56b89614RestMapper().fromExternal((CsvPaymentsInputFileDto) decoded);
+        var canonical = (CsvPaymentsInputFile) decoded;
         assertThat(canonical.sourceIdentity()).isEqualTo("object-A");
         assertThat(canonical.contentRef().isAbsent()).isTrue();
+        // The same decoded value must survive the actual release-bound durable codec.
+        try (var stream = getClass().getResourceAsStream("/META-INF/pipeline/pipeline-contract.json")) {
+            assertThat(stream).as("Actual producer contract is packaged").isNotNull();
+            var contract = PipelineJson.mapper().readTree(stream);
+            var definition = contract.path("canonicalTypes").path("CsvPaymentsInputFile");
+            assertThat(definition.path("runtimeClass").asText()).isEqualTo(CsvPaymentsInputFile.class.getName());
+            assertThat(definition.path("definitionFingerprint").asText()).as("Canonical type fingerprint is present").isNotBlank();
+            assertThat(contract.path("canonicalCatalogFingerprint").asText()).as("Canonical catalog fingerprint is present").isNotBlank();
+            var binding = new CanonicalPayloadBinding("CsvPaymentsInputFile",
+                definition.path("definitionFingerprint").asText(),
+                contract.path("canonicalCatalogFingerprint").asText(), CsvPaymentsInputFile.class,
+                PipelineJson.mapper().getTypeFactory().constructType(CsvPaymentsInputFile.class));
+            var codec = new JsonDurablePayloadCodec();
+            var restored = (CsvPaymentsInputFile) codec.decode(codec.encode(decoded, binding), binding);
+            assertThat(restored).isEqualTo(canonical);
+        }
     }
 
     @Test void firstBurnKeepsAwaitAndOutputWithoutSqlHistorySteps() throws Exception {

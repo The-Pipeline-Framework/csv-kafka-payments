@@ -57,7 +57,7 @@ jobs:
         run: python3 -m unittest discover -s scripts -p 'test_*release*.py'
 
   pilot-ingress:
-    name: Verify FUNCTION upload ingress
+    name: Verify FUNCTION upload, workers and S3 result
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -73,29 +73,32 @@ jobs:
           java-version: '21'
           cache: maven
           cache-path: ${{ github.workspace }}/.m2/repository
-      - name: Build the existing FUNCTION REST producer
-        run: >-
-          ./build-pipeline-runtime.sh
-          -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc
-          -DskipTests -DskipITs=true
-          -Dtpf.build.platform=FUNCTION -Dtpf.build.lambda.scope=compile
-          -Dquarkus.container-image.build=false
-          -Dtpf.await.kafka.reactive-messaging.enabled=false
-          -Dcsv-payments.payment-provider.enabled=false
-          -Dcsv-payments.payment-provider-sqs.enabled=true
-      - name: Verify and package the disabled-by-default IAM ingress
-        run: >-
-          ./mvnw -B -ntp -f ingress-lambda-svc/pom.xml clean verify
-          -Dquarkus.container-image.build=false
-          -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
+      - name: Build and prove upload, native handlers, payment workers and S3 results
+        env:
+          MAVEN_ARGS: -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+        run: bash self-host/pilot/build-and-prove.sh
+      - name: Retain local proof diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: csv-worker-s3-proof-${{ github.sha }}
+          path: |
+            target/pilot-local-proof/*.json
+            target/pilot-local-proof/*.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Retain the review package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: csv-function-ingress-${{ github.sha }}
           path: |
             ingress-lambda-svc/target/function.zip
+            worker-lambda-svc/target/function.zip
+            provider-lambda-svc/target/function.zip
+            worker-lambda-svc/target/surefire-reports/TEST-*.xml
+            provider-lambda-svc/target/surefire-reports/TEST-*.xml
             ingress-lambda-svc/target/surefire-reports/TEST-*.xml
-            orchestrator-svc/target/classes/META-INF/pipeline/
+            target/pilot-local-proof/worker-variant/pipeline/
           if-no-files-found: error
           retention-days: 7
 
