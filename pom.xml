@@ -122,6 +122,7 @@
         <csv.runtime.layout>modular</csv.runtime.layout>
         <tpf.build.transport>GRPC</tpf.build.transport>
         <tpf.build.platform>COMPUTE</tpf.build.platform>
+        <tpf.build.coordination.host>NATIVE</tpf.build.coordination.host>
         <!-- Generated FUNCTION handlers need Lambda's API at compile time. -->
         <tpf.build.lambda.scope>provided</tpf.build.lambda.scope>
     </properties>
@@ -448,6 +449,7 @@
                                     <arg>${protobuf.descriptor.fileArg}</arg>
                                     <arg>-Apipeline.transport=${tpf.build.transport}</arg>
                                     <arg>-Apipeline.platform=${tpf.build.platform}</arg>
+                                    <arg>-Apipeline.coordination.host=${tpf.build.coordination.host}</arg>
                                 </compilerArgs>
                             </configuration>
                         </execution>

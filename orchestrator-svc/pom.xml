@@ -32,6 +32,12 @@
     </properties>
 
     <dependencies>
+        <!-- Compile the generated Durable decoder; its host is packaged separately. -->
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework-aws-durable-coordination-host</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- Common module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>
@@ -259,10 +265,6 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
             </plugin>
             <plugin>
@@ -288,6 +290,18 @@
             <plugin>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- This host is compile-only for optional generated code. The native
+                         composition has its own application and verification lane. -->
+                    <systemPropertyVariables>
+                        <quarkus.arc.exclude-dependency.native-host.group-id>org.pipelineframework</quarkus.arc.exclude-dependency.native-host.group-id>
+                        <quarkus.arc.exclude-dependency.native-host.artifact-id>pipelineframework-aws-durable-coordination-host</quarkus.arc.exclude-dependency.native-host.artifact-id>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>

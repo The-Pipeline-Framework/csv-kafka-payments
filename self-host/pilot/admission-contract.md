@@ -1,6 +1,6 @@
 # Restricted CSV IAM upload and native Durable ingress integration
 
-App Lead implementation contract, updated 16 October 2026. The AWS Durable host is an existing published framework capability. This module adds application admission policy and composes that host; it does not introduce a host, consumer, workflow ledger or infrastructure graph. The deployment operator owns credentials, resource lifecycle and the actual SQS consumer. TPF Cloud's product acceptance and existing-capability handoff remain in its own documentation; this OSS application does not need that checkout to build or run the local proof.
+App Lead implementation contract, updated 17 October 2026. The AWS Durable host is an existing published framework capability. This module adds application admission policy and composes that host; it does not introduce a host, consumer, workflow ledger or infrastructure graph. The deployment operator owns credentials, resource lifecycle and the actual SQS consumer. TPF Cloud's product acceptance and existing-capability handoff remain in its own documentation; this OSS application does not need that checkout to build or run the local proof.
 
 ## Native boundaries and narrow policy
 
@@ -12,9 +12,11 @@ Invocation verifies native owned-reference provenance through the S3 provider, m
 
 The existing custom Durable host handlers cannot be packaged with Quarkus Lambda HTTP: the first build correctly rejects multiple handlers. The dedicated `ingress-lambda-svc` HTTP artifact therefore consumes only the public coordination-model artifact and invokes the existing AwsDurableIngressHandler at a pinned numeric function version. That unchanged native host calls AwsDurableExecutionStarter to start the pinned coordinator. This is host composition, not a replacement starter or coordinator. A provider start receipt is not semantic admission, business completion, replay, or Cloud ACTIVE.
 
-## Transport selection for persistence
+## First-burn persistence and transport
 
-The pilot declares `platform: FUNCTION` and `transport: REST`. Its persistence aspect leaves `enabledTargets` unset: the compiler selects adapters from the transport and deployment role. The copied `GRPC_SERVICE` / `CLIENT_STEP` override was misleading; both are gRPC targets. At the published compiler baseline, model expansion runs before target resolution, which replaces those initial targets with REST targets. The old entries also cause the protobuf generator to emit unused gRPC persistence stubs; omitting them removes those stubs without removing the REST persistence steps. Verify the generated REST persistence clients, resources and function handlers and the two persistence entries in the execution order when changing this configuration. Compilation does not establish remote database connectivity or completed payment persistence.
+The human selected S3 results plus native Durable state for the first burn on 17 October 2026. The pilot configuration therefore omits the optional SQL history aspect, and its build excludes the SQL persistence host. The ordinary CSV configuration and its SQL tests remain intact. Native workflow records are not proof that the final CSV result has been written: actual S3 output and useful business completion remain acceptance obligations.
+
+The pilot declares `platform: FUNCTION` and `transport: REST`. Adapter selection follows that transport and deployment role. Do not copy the ordinary gRPC aspect targets into the pilot or introduce a SQL binding as a prerequisite to this finite burn.
 
 ## Verification obligations
 
@@ -35,7 +37,9 @@ Use JDK 21, Docker Compose and the normal public dependency repositories. Every 
 
 ```sh
 export PIPELINE_CONFIG="$PWD/config/pipeline.pilot.yaml" PIPELINE_TRANSPORT=REST
-./build-pipeline-runtime.sh -DskipTests -DskipITs=true \
+./build-pipeline-runtime.sh \
+  -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc \
+  -DskipTests -DskipITs=true \
   -Dtpf.build.platform=FUNCTION -Dtpf.build.lambda.scope=compile \
   -Dquarkus.container-image.build=false \
   -Dtpf.await.kafka.reactive-messaging.enabled=false \

@@ -75,7 +75,9 @@ jobs:
           cache-path: ${{ github.workspace }}/.m2/repository
       - name: Build the existing FUNCTION REST producer
         run: >-
-          ./build-pipeline-runtime.sh -DskipTests -DskipITs=true
+          ./build-pipeline-runtime.sh
+          -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc
+          -DskipTests -DskipITs=true
           -Dtpf.build.platform=FUNCTION -Dtpf.build.lambda.scope=compile
           -Dquarkus.container-image.build=false
           -Dtpf.await.kafka.reactive-messaging.enabled=false
@@ -94,5 +96,48 @@ jobs:
             ingress-lambda-svc/target/function.zip
             ingress-lambda-svc/target/surefire-reports/TEST-*.xml
             orchestrator-svc/target/classes/META-INF/pipeline/
+          if-no-files-found: error
+          retention-days: 7
+
+  durable-action:
+    name: Verify native Durable action package
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PIPELINE_CONFIG: ${{ github.workspace }}/config/pipeline.pilot.yaml
+      PIPELINE_TRANSPORT: REST
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-path: ${{ github.workspace }}/.m2/repository
+      - name: Generate the existing native Durable input seam
+        run: >-
+          ./build-pipeline-runtime.sh
+          -pl common,payments-processing-svc,pipeline-runtime-svc,orchestrator-svc
+          -DskipTests -DskipITs=true
+          -Dtpf.build.platform=FUNCTION -Dtpf.build.coordination.host=AWS_DURABLE
+          -Dtpf.build.lambda.scope=compile -Dquarkus.container-image.build=false
+          -Dtpf.await.kafka.reactive-messaging.enabled=false
+          -Dcsv-payments.payment-provider.enabled=false
+          -Dcsv-payments.payment-provider-sqs.enabled=true
+      - name: Verify and package the published native action handler
+        run: >-
+          ./mvnw -B -ntp -f durable-action-lambda-svc/pom.xml clean verify
+          -Dquarkus.container-image.build=false
+          -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
+      - name: Retain the native action review package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: csv-durable-action-${{ github.sha }}
+          path: |
+            durable-action-lambda-svc/target/function.zip
+            durable-action-lambda-svc/target/surefire-reports/TEST-*.xml
+            durable-action-lambda-svc/target/classes/META-INF/pipeline/
           if-no-files-found: error
           retention-days: 7
