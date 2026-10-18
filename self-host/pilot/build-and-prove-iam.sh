@@ -10,11 +10,14 @@ else
   read -r -a args <<< "${MAVEN_ARGS:-}" || true
 fi
 has_cache=false
-for argument in "${args[@]}"; do
-  [[ "$argument" != -Dmaven.repo.local=* ]] || has_cache=true
-  # This proof owns its disclosed fixture input, never a deployment binding.
-  [[ "$argument" != -Dcsv.cloud.binding-file=* && "$argument" != -Dcsv.cloud.worker-binding-file=* ]] || { echo 'Do not select a live binding for the fixture' >&2; exit 1; }
-done
+# Bash 3.2 treats expansion of an empty array as unset under nounset.
+if [[ ${#args[@]} -gt 0 ]]; then
+  for argument in "${args[@]}"; do
+    [[ "$argument" != -Dmaven.repo.local=* ]] || has_cache=true
+    # This proof owns its disclosed fixture input, never a deployment binding.
+    [[ "$argument" != -Dcsv.cloud.binding-file=* && "$argument" != -Dcsv.cloud.worker-binding-file=* ]] || { echo 'Do not select a live binding for the fixture' >&2; exit 1; }
+  done
+fi
 if [[ "$has_cache" == false ]]; then args+=("-Dmaven.repo.local=$pilot_repo/.m2/repository"); fi
 # Save all ordinary artifacts before the first fixture-bound build, including action.
 # Never overwrite an original snapshot on a rerun with a previously bound artifact.
@@ -115,8 +118,9 @@ cp ingress-lambda-svc/target/function.zip target/pilot-local-proof/worker-varian
   -Dquarkus.container-image.build=false "${args[@]}"
 ./mvnw -B -ntp -f durable-action-lambda-svc/pom.xml verify \
   -Dquarkus.container-image.build=false "${args[@]}" "$binding"
-# Only regenerate the application module affected by the existing HTTP bridge variant.
-./mvnw -B -ntp -pl orchestrator-svc clean install -DskipTests -DskipITs=true \
+# Both HTTP Lambda consumers require matching producers. The earlier native proof
+# installed AWS_DURABLE pipeline-runtime classes, which include custom handlers.
+./mvnw -B -ntp -pl pipeline-runtime-svc,orchestrator-svc clean install -DskipTests -DskipITs=true \
   -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport=REST \
   -Dtpf.build.platform=FUNCTION -Dtpf.build.coordination.host=NATIVE \
   -Dtpf.build.function.http-bridge=true -Dtpf.build.lambda.scope=compile \

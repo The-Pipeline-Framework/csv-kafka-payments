@@ -4,6 +4,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import tempfile
 import subprocess
@@ -84,6 +85,26 @@ class CloudBindingTest(unittest.TestCase):
 
 
 class ProofArtifactRestorationTest(unittest.TestCase):
+    def test_real_bash_header_accepts_empty_configured_and_file_arguments(self):
+        script=(pathlib.Path(__file__).resolve().parents[1]/'self-host/pilot/build-and-prove-iam.sh').read_text()
+        header=script[:script.index('# Save all ordinary artifacts')]
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory)
+            probe=root/'self-host/pilot/probe.sh'
+            probe.parent.mkdir(parents=True)
+            probe.write_text(header+'printf "%s\\0" "${args[@]}"\n')
+            environment={key:value for key,value in os.environ.items() if key not in ('MAVEN_ARGS','TPF_MAVEN_ARGS_FILE')}
+            cache='-Dmaven.repo.local='+str(root/'.m2/repository')
+            cases=[({},[cache]),({'MAVEN_ARGS':''},[cache]),({'MAVEN_ARGS':'-ntp -Dexample=true'},['-ntp','-Dexample=true',cache])]
+            arguments=root/'args.nul'
+            arguments.write_bytes(b'-Dexample=contains spaces\0-Dmaven.repo.local=explicit-cache\0')
+            cases.append(({'TPF_MAVEN_ARGS_FILE':str(arguments)},['-Dexample=contains spaces','-Dmaven.repo.local=explicit-cache']))
+            for changes,expected in cases:
+                with self.subTest(changes=changes):
+                    result=subprocess.run(['bash',str(probe)],env=environment|changes,capture_output=True)
+                    self.assertEqual(result.returncode,0,result.stderr.decode())
+                    self.assertEqual(result.stdout.decode().rstrip('\0').split('\0'),expected)
+
     def test_success_and_failure_restore_all_ordinary_targets(self):
         # Execute the real script's snapshot/EXIT trap with tiny package-flow fixtures.
         # This tests CI artifact ownership only, never TPF workflow or AWS semantics.
@@ -152,8 +173,11 @@ PY
 from pathlib import Path
 import sys
 args=sys.argv[1:]
-if 'orchestrator-svc' in args:
+if '-pl' in args:
     variant=next(a.split('=',1)[1] for a in args if a.startswith('-Dtpf.build.coordination.host='))
+    projects=args[args.index('-pl')+1].split(',')
+    assert 'orchestrator-svc' in projects
+    if variant=='NATIVE':assert 'pipeline-runtime-svc' in projects,'Worker HTTP producer was not rebuilt'
     Path('variant').write_text(variant)
     with Path('calls').open('a') as output:output.write(variant+'\\n')
 elif 'durable-action-lambda-svc/pom.xml' in args:
@@ -175,10 +199,17 @@ else:raise AssertionError(args)
         guard=compile(ast.Module(body=tree.body[start:end],type_ignores=[]),str(source),'exec')
         with tempfile.TemporaryDirectory() as directory:
             root=pathlib.Path(directory)
-            for bound in (False,True):
-                package=root/('bound.zip' if bound else 'ordinary.zip')
+            cases = [
+                (False, 'ordinary', '{}'),
+                (True, 'META-INF/csv-cloud-transport-evidence.json', '{}'),
+                (True, 'META-INF/microprofile-config.properties', 'csv.iam.endpoints.process-csv-payments-input=https://fixture.lambda-url.eu-west-1.on.aws'),
+                (True, 'META-INF/microprofile-config.properties', 'quarkus.rest-client.process-csv-payments-input.providers=org.pipelineframework.csv.iam.LambdaIamRequestSigning'),
+                (False, 'META-INF/microprofile-config.properties', 'application.name=ordinary-unbound'),
+            ]
+            for index, (bound, entry, contents) in enumerate(cases):
+                package=root/f'package-{index}.zip'
                 with zipfile.ZipFile(package,'w') as archive:
-                    archive.writestr('META-INF/csv-cloud-transport-evidence.json' if bound else 'ordinary','{}')
+                    archive.writestr(entry, contents)
                 args=type('Args',(),{'ingress_package':package})()
                 context={'args':args,'ROOT':root,'EVIDENCE':root/'evidence','zipfile':zipfile}
                 if bound:

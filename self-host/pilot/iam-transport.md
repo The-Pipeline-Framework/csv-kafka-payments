@@ -167,10 +167,11 @@ The script first preserves all three ordinary unbound packages, then always rest
 their normal `target/function.zip` paths on exit, including failure. It removes proof-created
 configuration copies under `target/classes`, `target/cloud-binding-resources`, and the
 outside sidecar, restoring any preexisting legitimate resource bytes. Each run explicitly
-selects AWS_DURABLE before action packaging and NATIVE before ingress packaging.
-Fixture-bound ZIPs
-and their metadata are retained only under `target/iam-fixture-bound-packages/`, uploaded
-as explicitly labelled evidence. `target/iam-package-restoration.json` records both sets'
+selects AWS_DURABLE before action packaging and rebuilds both orchestrator and grouped
+pipeline-runtime producers as NATIVE with the HTTP bridge before ingress/worker packaging.
+Fixture-bound ZIPs and metadata remain under `target/iam-fixture-bound-packages/`.
+CI uploads only the labelled metadata and digest receipts; local retained evidence holds
+the test ZIPs. `target/iam-package-restoration.json` records both sets'
 digests. Ordinary CI review artifacts therefore remain unbound; fixture-bound packages
 are never presented as deployment bindings.
 The fixture supplies external HTTP responses, never TPF
