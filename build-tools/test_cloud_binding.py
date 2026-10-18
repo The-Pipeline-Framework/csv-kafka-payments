@@ -1,5 +1,6 @@
 """External Cloud binding syntax/projection controls; no TPF workflow fixtures."""
 import copy
+import ast
 import hashlib
 import importlib.util
 import json
@@ -97,6 +98,12 @@ for module in ('ingress-lambda-svc', 'durable-action-lambda-svc', 'worker-lambda
     with zipfile.ZipFile(Path(module)/'target/function.zip','w') as archive:
         archive.writestr('META-INF/csv-cloud-transport-evidence.json','{}')
         archive.writestr('fixture-only','never an ordinary deployment artifact')
+    target=Path(module)/'target'
+    owned=('META-INF/microprofile-config.properties','META-INF/csv-cloud-transport-evidence.json','META-INF/csv-cloud-worker-evidence.json')
+    for relative in ['cloud-binding-evidence.json']+[directory+'/'+name for directory in ('classes','cloud-binding-resources') for name in owned]:
+        path=target/relative
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text('proof-created resource')
 PY
 """
         for status in (0, 23):
@@ -109,15 +116,75 @@ PY
                     with zipfile.ZipFile(target, 'w') as archive:
                         archive.writestr('ordinary-package', module)
                     originals[module] = target.read_bytes()
-                result = subprocess.run(['bash', '-c', 'set -euo pipefail\n' + script[start:end] + mutation + f'exit {status}\n'], cwd=root, capture_output=True, text=True)
-                self.assertEqual(result.returncode, status, result.stderr)
-                receipt = json.loads((root / 'target/iam-package-restoration.json').read_text())
-                self.assertEqual(receipt['status'], 'PASS')
-                for module in modules:
-                    self.assertEqual((root / module / 'target/function.zip').read_bytes(), originals[module])
-                    fixture = root / 'target/iam-fixture-bound-packages' / module / 'function.zip'
-                    with zipfile.ZipFile(fixture) as archive:
-                        self.assertIn('fixture-only', archive.namelist())
+                    legitimate=target.parent/'classes/META-INF/microprofile-config.properties'
+                    legitimate.parent.mkdir(parents=True,exist_ok=True)
+                    legitimate.write_text('original legitimate application resource')
+                    (target.parent/'classes/META-INF/unrelated.txt').write_text('preserve unrelated output')
+                for rerun in range(2):
+                    result = subprocess.run(['bash', '-c', 'set -euo pipefail\n' + script[start:end] + mutation + f'exit {status}\n'], cwd=root, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    receipt = json.loads((root / 'target/iam-package-restoration.json').read_text())
+                    self.assertEqual(receipt['status'], 'PASS')
+                    for module in modules:
+                        target=root/module/'target'
+                        self.assertEqual((target/'function.zip').read_bytes(), originals[module])
+                        self.assertEqual((target/'classes/META-INF/microprofile-config.properties').read_text(),'original legitimate application resource')
+                        self.assertEqual((target/'classes/META-INF/unrelated.txt').read_text(),'preserve unrelated output')
+                        self.assertFalse((target/'cloud-binding-evidence.json').exists())
+                        for directory in ('classes','cloud-binding-resources'):
+                            for name in ('csv-cloud-transport-evidence.json','csv-cloud-worker-evidence.json'):
+                                self.assertFalse((target/directory/'META-INF'/name).exists())
+                        self.assertFalse((target/'cloud-binding-resources/META-INF/microprofile-config.properties').exists())
+                        fixture=root/'target/iam-fixture-bound-packages'/module/'function.zip'
+                        with zipfile.ZipFile(fixture) as archive:self.assertIn('fixture-only',archive.namelist())
+
+    def test_rerun_selects_action_variant_before_packaging(self):
+        root_source=pathlib.Path(__file__).resolve().parents[1]
+        script=(root_source/'self-host/pilot/build-and-prove-iam.sh').read_text()
+        start=script.index('# A previous proof leaves NATIVE installed.')
+        end=script.index('./mvnw -B -ntp -f ingress-lambda-svc/pom.xml',start)
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory)
+            (root/'variant').write_text('NATIVE')
+            # CLI boundary fixture records build selection only; it builds no TPF code.
+            maven=root/'mvnw'
+            maven.write_text('''#!/usr/bin/env python3
+from pathlib import Path
+import sys
+args=sys.argv[1:]
+if 'orchestrator-svc' in args:
+    variant=next(a.split('=',1)[1] for a in args if a.startswith('-Dtpf.build.coordination.host='))
+    Path('variant').write_text(variant)
+    with Path('calls').open('a') as output:output.write(variant+'\\n')
+elif 'durable-action-lambda-svc/pom.xml' in args:
+    assert Path('variant').read_text()=='AWS_DURABLE','Action packaged with wrong installed variant'
+    with Path('calls').open('a') as output:output.write('ACTION\\n')
+else:raise AssertionError(args)
+''')
+            maven.chmod(0o755)
+            for rerun in range(2):
+                result=subprocess.run(['bash','-c','set -euo pipefail\nargs=(-Dmaven.repo.local=fixture); binding=fixture; pilot_repo=$PWD\n'+script[start:end]],cwd=root,capture_output=True,text=True)
+                self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((root/'calls').read_text().splitlines(),['AWS_DURABLE','ACTION','NATIVE']*2)
+
+    def test_local_proof_rejects_bound_package_before_mutation(self):
+        source=pathlib.Path(__file__).resolve().parents[1]/'self-host/pilot/run-local-proof.py'
+        tree=ast.parse(source.read_text())
+        start=next(i for i,node in enumerate(tree.body) if isinstance(node,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='ZIP' for t in node.targets))
+        end=next(i for i,node in enumerate(tree.body[start:],start) if isinstance(node,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='CP' for t in node.targets))
+        guard=compile(ast.Module(body=tree.body[start:end],type_ignores=[]),str(source),'exec')
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory)
+            for bound in (False,True):
+                package=root/('bound.zip' if bound else 'ordinary.zip')
+                with zipfile.ZipFile(package,'w') as archive:
+                    archive.writestr('META-INF/csv-cloud-transport-evidence.json' if bound else 'ordinary','{}')
+                args=type('Args',(),{'ingress_package':package})()
+                context={'args':args,'ROOT':root,'EVIDENCE':root/'evidence','zipfile':zipfile}
+                if bound:
+                    with self.assertRaisesRegex(RuntimeError,'Ingress package carries a Cloud binding'):exec(guard,context)
+                else:exec(guard,context)
+                self.assertFalse((root/'evidence').exists())
 
 
 if __name__ == '__main__':

@@ -22,6 +22,9 @@ if args.host_jar:
 if hashlib.sha256(HOST.read_bytes()).hexdigest()!=(args.host_sha256 or '1c6e89433cd7687c301487638cb46ce85d94a5714683b9b865eb349240e31b6b'):
  raise RuntimeError('Native host bytes do not match the pinned SHA-256')
 ZIP=args.ingress_package.resolve() if args.ingress_package else ROOT/'ingress-lambda-svc/target/function.zip';UNPACK=EVIDENCE/'unpacked'
+with zipfile.ZipFile(ZIP) as archive:
+ if any(name.startswith('META-INF/csv-cloud-') for name in archive.namelist()):
+  raise RuntimeError('Ingress package carries a Cloud binding: '+str(ZIP))
 CP=f'{EVIDENCE}:{UNPACK}:{UNPACK}/lib/*:{HOST}'
 ENV={k:v for k,v in os.environ.items() if not k.startswith(('AWS_','QUARKUS_','CSV_','PIPELINE_','TPF_','JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS'))}
 ENV.update(AWS_ACCESS_KEY_ID='test',AWS_SECRET_ACCESS_KEY='test',AWS_REGION='us-east-1',AWS_DEFAULT_REGION='us-east-1',AWS_EC2_METADATA_DISABLED='true',AWS_ENDPOINT_URL_S3=ENDPOINT,AWS_ENDPOINT_URL_DYNAMODB=ENDPOINT,AWS_ENDPOINT_URL_LAMBDA=LAMBDA,TPF_OBJECT_REFERENCE_HMAC_KEY=base64.b64encode(b'0123456789abcdef0123456789abcdef').decode(),PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET='local-pilot-resume-key-not-a-cloud-key',TPF_WORKER_SECRET='local-pilot-worker-key-not-a-cloud-key',TPF_ADMIN_TOKEN='local-pilot-admin',TPF_CONTROL_PLANE_TOKEN='local-pilot-control',PIPELINE_CONFIG=str(ROOT/'config/pipeline.pilot.yaml'),PIPELINE_OBJECT_INGEST_AUTOSTART='false',TPF_AWS_DURABLE_FUNCTION='published-coordinator',TPF_AWS_DURABLE_QUALIFIER='7')

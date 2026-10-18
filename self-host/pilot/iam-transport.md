@@ -162,9 +162,13 @@ region, origins and provider registration from the packaged MicroProfile source;
 properties supply only external TLS/proxy and existing runtime activation settings. The
 script also rebuilds without a binding and without `clean`, then proves the actual generated
 client sends an unsigned request and that both generated resources are absent. It restores
-the selected package through another ordinary build before the final signed proof.
+the fixture-bound package through another bound build, still without `clean`, before the final signed proof.
 The script first preserves all three ordinary unbound packages, then always restores
-their normal `target/function.zip` paths on exit, including failure. Fixture-bound ZIPs
+their normal `target/function.zip` paths on exit, including failure. It removes proof-created
+configuration copies under `target/classes`, `target/cloud-binding-resources`, and the
+outside sidecar, restoring any preexisting legitimate resource bytes. Each run explicitly
+selects AWS_DURABLE before action packaging and NATIVE before ingress packaging.
+Fixture-bound ZIPs
 and their metadata are retained only under `target/iam-fixture-bound-packages/`, uploaded
 as explicitly labelled evidence. `target/iam-package-restoration.json` records both sets'
 digests. Ordinary CI review artifacts therefore remain unbound; fixture-bound packages

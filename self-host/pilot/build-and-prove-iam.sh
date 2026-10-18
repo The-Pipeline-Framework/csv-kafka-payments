@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run after build-and-prove.sh, whose final installed orchestrator is AWS_DURABLE.
+# Run after build-and-prove.sh; select each required orchestrator variant explicitly.
 set -euo pipefail
 pilot_repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$pilot_repo"
@@ -20,7 +20,9 @@ if [[ "$has_cache" == false ]]; then args+=("-Dmaven.repo.local=$pilot_repo/.m2/
 # Never overwrite an original snapshot on a rerun with a previously bound artifact.
 python3 - <<'PY'
 from pathlib import Path
-import shutil, zipfile
+import json, shutil, zipfile
+owned=('META-INF/microprofile-config.properties','META-INF/csv-cloud-transport-evidence.json','META-INF/csv-cloud-worker-evidence.json')
+resources={}
 for module in ('ingress-lambda-svc', 'durable-action-lambda-svc', 'worker-lambda-svc'):
     source=Path(module)/'target/function.zip'
     with zipfile.ZipFile(source) as archive:
@@ -30,6 +32,18 @@ for module in ('ingress-lambda-svc', 'durable-action-lambda-svc', 'worker-lambda
     destination=Path('target/iam-original-packages')/module/'function.zip'
     destination.parent.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(Path(module)/'target/function.zip',destination)
+    shutil.rmtree(destination.parent/'resources',ignore_errors=True)
+    paths=['cloud-binding-evidence.json']+[directory+'/'+name for directory in ('classes','cloud-binding-resources') for name in owned]
+    resources[module]=[]
+    for relative in paths:
+        source=Path(module)/'target'/relative
+        if source.exists():
+            if not source.is_file() or source.is_symlink():raise RuntimeError('Expected regular original resource: '+str(source))
+            backup=destination.parent/'resources'/relative
+            backup.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(source,backup)
+            resources[module].append(relative)
+Path('target/iam-original-packages/resource-snapshot.json').write_text(json.dumps(resources,sort_keys=True)+'\n')
 shutil.rmtree('target/iam-fixture-bound-packages',ignore_errors=True)
 PY
 restore_normal_packages() {
@@ -40,6 +54,8 @@ restore_normal_packages() {
 from pathlib import Path
 import hashlib, json, shutil, zipfile
 records=[];failures=[]
+resources=json.loads(Path('target/iam-original-packages/resource-snapshot.json').read_text())
+owned=('META-INF/microprofile-config.properties','META-INF/csv-cloud-transport-evidence.json','META-INF/csv-cloud-worker-evidence.json')
 for module in ('ingress-lambda-svc', 'durable-action-lambda-svc', 'worker-lambda-svc'):
     normal=Path(module)/'target/function.zip'
     original=Path('target/iam-original-packages')/module/'function.zip'
@@ -59,9 +75,14 @@ for module in ('ingress-lambda-svc', 'durable-action-lambda-svc', 'worker-lambda
     finally:
         try:
             shutil.copyfile(original,normal)
-            # Bound metadata is retained beside the labelled evidence ZIP, never
-            # beside an ordinary artifact whose bytes no longer contain it.
-            (normal.parent/'cloud-binding-evidence.json').unlink(missing_ok=True)
+            # Remove every proof-created copy; restore preexisting legitimate bytes.
+            paths=['cloud-binding-evidence.json']+[directory+'/'+name for directory in ('classes','cloud-binding-resources') for name in owned]
+            for relative in paths:
+                resource=normal.parent/relative
+                if relative in resources[module]:
+                    resource.parent.mkdir(parents=True,exist_ok=True)
+                    shutil.copyfile(original.parent/'resources'/relative,resource)
+                else:resource.unlink(missing_ok=True)
             records.append({'module':module,'restoredOrdinaryPackage':str(normal),
                             'restoredSha256':hashlib.sha256(normal.read_bytes()).hexdigest()})
         except Exception as failure:
@@ -85,6 +106,13 @@ python3 self-host/pilot/prove-iam-signing.py --write-fixture-binding target/iam-
 binding="-Dcsv.cloud.binding-file=$pilot_repo/target/iam-fixture-transport.json"
 # Preserve the unbound artifact whose digest belongs to the native worker/S3 receipt.
 cp ingress-lambda-svc/target/function.zip target/pilot-local-proof/worker-variant/ingress-function.zip
+# A previous proof leaves NATIVE installed. Always select the action's own variant.
+./mvnw -B -ntp -pl orchestrator-svc clean install -DskipTests -DskipITs=true \
+  -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport=REST \
+  -Dtpf.build.platform=FUNCTION -Dtpf.build.coordination.host=AWS_DURABLE \
+  -Dtpf.build.function.http-bridge=false -Dtpf.build.lambda.scope=compile \
+  "-Dpipeline.configArg=-Apipeline.config=$pilot_repo/config/pipeline.pilot.yaml" \
+  -Dquarkus.container-image.build=false "${args[@]}"
 ./mvnw -B -ntp -f durable-action-lambda-svc/pom.xml verify \
   -Dquarkus.container-image.build=false "${args[@]}" "$binding"
 # Only regenerate the application module affected by the existing HTTP bridge variant.
