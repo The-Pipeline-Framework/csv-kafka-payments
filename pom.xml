@@ -85,6 +85,9 @@
         <tpf.release.maven-plugin.version>26.10.1-SNAPSHOT</tpf.release.maven-plugin.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>
+        <!-- Optional, nonsecret Cloud-verified transport export; no source/profile selection. -->
+        <csv.cloud.binding-file></csv.cloud.binding-file>
+        <csv.cloud.worker-binding-file></csv.cloud.worker-binding-file>
         <tpf.release.input-csv-file-processing-svc.uri>file:///local-modular-release/input-csv-file-processing-svc.zip</tpf.release.input-csv-file-processing-svc.uri>
         <tpf.release.payment-status-svc.uri>file:///local-modular-release/payment-status-svc.zip</tpf.release.payment-status-svc.uri>
         <tpf.release.payments-processing-svc.uri>file:///local-modular-release/payments-processing-svc.zip</tpf.release.payments-processing-svc.uri>
