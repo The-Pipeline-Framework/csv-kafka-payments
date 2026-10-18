@@ -19,10 +19,30 @@
  <build>
   <resources>
    <resource><directory>src/main/resources</directory></resource>
+   <resource><directory>${project.build.directory}/cloud-binding-resources</directory></resource>
    <!-- Consume the producer's exact Compiled Truth, as the existing monolith packaging does. -->
    <resource><directory>${project.basedir}/../orchestrator-svc/target/classes</directory><includes><include>META-INF/pipeline/**</include></includes></resource>
   </resources>
   <plugins>
+   <plugin>
+    <groupId>org.apache.maven.plugins</groupId><artifactId>maven-antrun-plugin</artifactId><version>3.2.0</version>
+    <executions><execution><id>prepare-cloud-transport-binding</id><phase>generate-resources</phase><goals><goal>run</goal></goals>
+     <configuration><target xmlns:if="ant:if">
+      <!-- Always remove only owned outputs, including an earlier bound build without clean. -->
+      <delete dir="${project.build.directory}/cloud-binding-resources" />
+      <delete file="${project.build.outputDirectory}/META-INF/microprofile-config.properties" />
+      <delete file="${project.build.outputDirectory}/META-INF/csv-cloud-transport-evidence.json" />
+      <delete file="${project.build.directory}/cloud-binding-evidence.json" />
+      <condition property="csv.cloud.binding.selected"><not><equals arg1="${csv.cloud.binding-file}" arg2="" /></not></condition>
+      <exec executable="python3" failonerror="true" if:set="csv.cloud.binding.selected">
+       <arg value="${project.basedir}/../build-tools/prepare-cloud-binding.py" />
+       <arg value="--binding-file" /><arg value="${csv.cloud.binding-file}" />
+       <arg value="--output-directory" /><arg value="${project.build.directory}/cloud-binding-resources" />
+       <arg value="--evidence-file" /><arg value="${project.build.directory}/cloud-binding-evidence.json" />
+      </exec>
+     </target></configuration>
+    </execution></executions>
+   </plugin>
    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><configuration><proc>none</proc></configuration></plugin>
    <plugin><groupId>io.quarkus</groupId><artifactId>quarkus-maven-plugin</artifactId></plugin>
    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId></plugin>

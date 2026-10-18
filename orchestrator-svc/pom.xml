@@ -38,6 +38,9 @@
             <artifactId>pipelineframework-aws-durable-coordination-host</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- Application-owned signing through the existing REST provider seam. -->
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>http-auth-aws</artifactId></dependency>
+        <dependency><groupId>software.amazon.awssdk</groupId><artifactId>auth</artifactId></dependency>
         <!-- Common module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>
