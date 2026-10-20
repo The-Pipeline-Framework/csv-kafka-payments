@@ -1,0 +1,58 @@
+name: Supervised proof token handoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Reviewed main commit containing this exact workflow
+        required: true
+      recipient_public_key:
+        description: Ephemeral RSA3072 public key DER/SPKI, base64 (never private key)
+        required: true
+      recipient_sha256:
+        description: SHA256 of recipient DER/SPKI bytes
+        required: true
+      nonce:
+        description: Fresh 32-byte operator nonce, lowercase hex
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  seal:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'The-Pipeline-Framework/csv-kafka-payments' &&
+      github.ref == 'refs/heads/main' &&
+      github.sha == inputs.expected_commit && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Exchange existing scoped credential and seal one access token
+        env:
+          PROOF_CLIENT_SECRET: ${{ secrets.TPF_OAUTH_PROOF_CLIENT_SECRET }}
+          RECIPIENT_PUBLIC_KEY: ${{ inputs.recipient_public_key }}
+          RECIPIENT_SHA256: ${{ inputs.recipient_sha256 }}
+          HANDOFF_NONCE: ${{ inputs.nonce }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        shell: bash
+        run: |
+          set +x
+          unset NODE_OPTIONS NODE_DEBUG NODE_DEBUG_NATIVE NODE_EXTRA_CA_CERTS NODE_TLS_REJECT_UNAUTHORIZED SSL_CERT_FILE SSL_CERT_DIR OPENSSL_CONF HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+          node scripts/proof-token-handoff.cjs exchange
+      - name: Retain encrypted handoff only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: proof-token-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/proof-token-handoff/sealed-token.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove ephemeral ciphertext
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/proof-token-handoff"
