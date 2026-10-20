@@ -7,11 +7,12 @@
   <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version></dependency>
   <!-- Generated HTTP surface is an existing producer classifier, emitted after its main index. -->
   <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>pipeline-server</classifier></dependency>
-  <!-- Main indexing precedes role compilation; include the emitted client beans explicitly. -->
-  <dependency><groupId>org.pipelineframework.csv</groupId><artifactId>orchestrator-svc</artifactId><version>${project.version}</version><classifier>orchestrator-client</classifier></dependency>
+  <!-- Removing resident config reindexes the main producer JAR, which already merges
+       emitted client classes. A second client classifier would duplicate CDI beans. -->
   <dependency><groupId>org.pipelineframework</groupId><artifactId>pipelineframework-aws-durable-coordination-model</artifactId></dependency>
   <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-amazon-lambda-http</artifactId></dependency>
   <dependency><groupId>software.amazon.awssdk</groupId><artifactId>lambda</artifactId></dependency>
+  <dependency><groupId>software.amazon.awssdk</groupId><artifactId>ssm</artifactId></dependency>
   <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-junit</artifactId><scope>test</scope></dependency>
   <dependency><groupId>org.mockito</groupId><artifactId>mockito-core</artifactId><scope>test</scope></dependency>
   <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><version>3.26.3</version><scope>test</scope></dependency>
