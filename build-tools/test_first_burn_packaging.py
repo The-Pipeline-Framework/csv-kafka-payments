@@ -24,11 +24,12 @@ class FirstBurnPackagingTest(unittest.TestCase):
         worker=P.plan('worker',worker='/synthetic/roles.json')
         self.assertIn('-Dtpf.build.coordination.host=NATIVE',worker[0][1]);self.assertEqual(worker[1][0],'worker-lambda-svc')
     def test_production_configuration_and_credentials_cannot_leak_into_build(self):
-        with patch.dict(os.environ,{'AWS_PROFILE':'not-for-build','AWS_SECRET_ACCESS_KEY':'sensitive','CSV_PILOT_RESUME_TOKEN_PARAMETER_ARN':'not-for-build','PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET':'sensitive','MAVEN_ARGS':'-U','TPF_MAVEN_ARGS_FILE':'unreviewed','MAVEN_OPTS':'-Dsecret=sensitive','JAVA_OPTS':'-Dsecret=sensitive','JAVA_TOOL_OPTIONS':'-Dsecret=sensitive','_JAVA_OPTIONS':'-Dsecret=sensitive','JDK_JAVA_OPTIONS':'-Dsecret=sensitive'}):
+        with patch.dict(os.environ,{'AWS_PROFILE':'not-for-build','AWS_SECRET_ACCESS_KEY':'sensitive','CSV_PILOT_RESUME_TOKEN_PARAMETER_ARN':'not-for-build','PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET':'sensitive','MAVEN_ARGS':'-U','TPF_MAVEN_ARGS_FILE':'unreviewed','QUARKUS_PROFILE':'unreviewed','QUARKUS_CONFIG_LOCATIONS':'file:/unreviewed.properties','MAVEN_SKIP_RC':'false','MAVEN_DEBUG_OPTS':'-Dsecret=sensitive','MAVEN_OPTS':'-Dsecret=sensitive','JAVA_OPTS':'-Dsecret=sensitive','JAVA_TOOL_OPTIONS':'-Dsecret=sensitive','_JAVA_OPTIONS':'-Dsecret=sensitive','JDK_JAVA_OPTIONS':'-Dsecret=sensitive'}):
             env=P.environment()
+        self.assertNotIn('QUARKUS_PROFILE',env);self.assertNotIn('QUARKUS_CONFIG_LOCATIONS',env);self.assertEqual(env['MAVEN_SKIP_RC'],'true')
         self.assertNotIn('AWS_PROFILE',env);self.assertNotIn('AWS_SECRET_ACCESS_KEY',env);self.assertNotIn('CSV_PILOT_RESUME_TOKEN_PARAMETER_ARN',env)
         self.assertNotIn('PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET',env);self.assertNotIn('MAVEN_ARGS',env)
-        for key in ['MAVEN_OPTS','JAVA_OPTS','JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS']:self.assertNotIn(key,env)
+        for key in ['MAVEN_DEBUG_OPTS','MAVEN_OPTS','JAVA_OPTS','JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS']:self.assertNotIn(key,env)
         self.assertEqual(env['AWS_EC2_METADATA_DISABLED'],'true')
     def test_source_mutation_rejects_packaging_and_owned_outputs_are_excluded(self):
         with tempfile.TemporaryDirectory() as directory:

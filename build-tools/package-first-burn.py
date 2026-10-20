@@ -75,10 +75,10 @@ def validate_export(stage,export,receipt,expected_receipt_sha,output):
 
 
 def environment(maven_args_file=None):
-    env={key:value for key,value in os.environ.items() if not key.startswith(('AWS_','CSV_PILOT_'))
-        and key not in ('MAVEN_ARGS','MAVEN_OPTS','JAVA_OPTS','JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS',
+    env={key:value for key,value in os.environ.items() if not key.startswith(('AWS_','CSV_PILOT_','QUARKUS_'))
+        and key not in ('MAVEN_ARGS','MAVEN_OPTS','MAVEN_DEBUG_OPTS','JAVA_OPTS','JAVA_TOOL_OPTIONS','_JAVA_OPTIONS','JDK_JAVA_OPTIONS',
             'TPF_MAVEN_ARGS_FILE','PIPELINE_ORCHESTRATOR_RESUME_TOKEN_SECRET','MVN_BIN')}
-    env.update(PIPELINE_CONFIG=str(ROOT/'config/pipeline.pilot.yaml'),PIPELINE_TRANSPORT='REST',AWS_EC2_METADATA_DISABLED='true')
+    env.update(PIPELINE_CONFIG=str(ROOT/'config/pipeline.pilot.yaml'),PIPELINE_TRANSPORT='REST',AWS_EC2_METADATA_DISABLED='true',MAVEN_SKIP_RC='true')
     if maven_args_file is not None:env['TPF_MAVEN_ARGS_FILE']=str(Path(maven_args_file).resolve())
     return env
 
