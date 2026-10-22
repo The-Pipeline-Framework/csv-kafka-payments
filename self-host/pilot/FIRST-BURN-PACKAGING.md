@@ -14,7 +14,6 @@ parameter ARN and version as the native deployment**:
 CSV_PILOT_RESUME_TOKEN_PARAMETER_ARN=<actual native ResumeTokenParameterArn>
 CSV_PILOT_RESUME_TOKEN_PARAMETER_VERSION=1
 CSV_PILOT_SIGNING_LIFECYCLE_VALIDATION=validated
-PIPELINE_OBJECT_INGEST_AUTOSTART=false
 ```
 
 The ARN must identify `/tpf/durable/<scope>/resume-token/g-<32..64 lowercase hex>`.
@@ -43,6 +42,25 @@ reindex that JAR, including its merged clients; ingress therefore consumes those
 clients once from the main JAR rather than adding a duplicate client classifier. Lambda HTTP terminates inbound
 TLS; generated outbound clients keep HTTPS, SigV4 and system TLS verification.
 Existing localhost proofs keep their explicit fixture TLS settings unchanged.
+
+## Package cold startup
+
+`prove-signing-bootstrap.py` boots the real packaged Quarkus handler with its own
+configuration and no checkout `PIPELINE_CONFIG` or ingest-autostart override.
+Ingress excludes the separate resident object-ingest bootstrap bean; REST upload
+operations continue using the existing connector. Unknown configuration remains
+an error. Run the same proof against each final ZIP before publication:
+
+```sh
+python3 self-host/pilot/prove-signing-bootstrap.py --package ingress-lambda-svc/target/function.zip
+python3 self-host/pilot/prove-signing-bootstrap.py --role worker --package worker-lambda-svc/target/function.zip --output target/worker-signing-cold-proof
+python3 self-host/pilot/prove-signing-bootstrap.py --role provider --package provider-lambda-svc/target/function.zip --output target/provider-cold-proof
+```
+
+Ingress and worker retain all signing-source negative cases. The provider boots
+with an empty finite SQS batch and must return no batch failures; no business
+payment or provider send is exercised by that check. These are local cold starts,
+not live IAM, invocation or recovery acceptance.
 
 ## Staged builds from actual owner observations
 
