@@ -14,7 +14,7 @@ import software.amazon.awssdk.services.ssm.model.GetParameterRequest;
 import software.amazon.awssdk.services.ssm.model.GetParameterResponse;
 import software.amazon.awssdk.services.ssm.model.ParameterType;
 
-/** Resolve the ingress payload-signing key from the same immutable native resume generation. */
+/** Resolve ingress and worker signing from the same immutable native resume generation. */
 public final class PilotSigningConfigSourceFactory implements ConfigSourceFactory {
     private static final String PREFIX = "csv.pilot.";
     private static final String SECRET = "pipeline.orchestrator.resume-token-secret";
