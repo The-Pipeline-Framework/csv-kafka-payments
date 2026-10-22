@@ -32,6 +32,11 @@
     </properties>
 
     <dependencies>
+        <!-- Shared immutable pilot resume signing for ingress and generated workers. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssm</artifactId>
+        </dependency>
         <!-- Build-only: the generator goals below call compiler entry points directly. -->
         <dependency>
             <groupId>org.pipelineframework</groupId>

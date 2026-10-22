@@ -9,12 +9,13 @@ import java.util.function.Function;
 import io.smallrye.config.ConfigSourceContext;
 import io.smallrye.config.ConfigSourceFactory;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ssm.SsmClient;
 import software.amazon.awssdk.services.ssm.model.GetParameterRequest;
 import software.amazon.awssdk.services.ssm.model.GetParameterResponse;
 import software.amazon.awssdk.services.ssm.model.ParameterType;
 
-/** Resolve the ingress payload-signing key from the same immutable native resume generation. */
+/** Resolve ingress and worker signing from the same immutable native resume generation. */
 public final class PilotSigningConfigSourceFactory implements ConfigSourceFactory {
     private static final String PREFIX = "csv.pilot.";
     private static final String SECRET = "pipeline.orchestrator.resume-token-secret";
@@ -22,7 +23,8 @@ public final class PilotSigningConfigSourceFactory implements ConfigSourceFactor
 
     public PilotSigningConfigSourceFactory() {
         this(request -> {
-            try (var client = SsmClient.builder().overrideConfiguration(config -> config
+            try (var client = SsmClient.builder().region(Region.of(request.name().split(":")[3]))
+                    .overrideConfiguration(config -> config
                     .apiCallTimeout(Duration.ofSeconds(15)).apiCallAttemptTimeout(Duration.ofSeconds(5))).build()) {
                 return client.getParameter(request);
             }

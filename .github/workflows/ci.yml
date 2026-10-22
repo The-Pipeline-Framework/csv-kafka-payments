@@ -164,12 +164,20 @@ jobs:
           ./mvnw -B -ntp -f durable-action-lambda-svc/pom.xml clean verify
           -Dquarkus.container-image.build=false
           -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
+      - name: Initialize the actual packaged Lambda configuration
+        run: >-
+          ./mvnw -B -ntp -f durable-action-lambda-svc/pom.xml test
+          -Dtest=DurableCompositionTest
+          -Dcsv.action.package.path="$GITHUB_WORKSPACE/durable-action-lambda-svc/target/function.zip"
+          -Dmaven.repo.local="$GITHUB_WORKSPACE/.m2/repository"
       - name: Retain the native action review package
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: csv-durable-action-${{ github.sha }}
           path: |
             durable-action-lambda-svc/target/function.zip
+            durable-action-lambda-svc/target/packaged-lambda-startup.log
             durable-action-lambda-svc/target/surefire-reports/TEST-*.xml
             durable-action-lambda-svc/target/classes/META-INF/pipeline/
           if-no-files-found: error
