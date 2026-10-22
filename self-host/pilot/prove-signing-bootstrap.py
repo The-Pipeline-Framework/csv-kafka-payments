@@ -5,12 +5,12 @@ ROOT=pathlib.Path(__file__).resolve().parents[2]
 ARN='arn:aws:ssm:us-east-2:123456789012:parameter/tpf/durable/cold-fixture/resume-token/g-'+'a'*32
 KEY='synthetic retained signing key only for offline cold bootstrap'
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--package',type=pathlib.Path,default=ROOT/'ingress-lambda-svc/target/function.zip')
+parser.add_argument('--package',type=pathlib.Path)
 parser.add_argument('--role',choices=('ingress','worker','provider'),default='ingress')
-parser.add_argument('--output',type=pathlib.Path,default=ROOT/'target/ingress-signing-cold-proof')
+parser.add_argument('--output',type=pathlib.Path)
 args=parser.parse_args()
-package=args.package.resolve()
-OUT=args.output;OUT.mkdir(parents=True,exist_ok=True)
+package=(args.package or ROOT/(args.role+'-lambda-svc/target/function.zip')).resolve()
+OUT=args.output or ROOT/('target/'+args.role+'-signing-cold-proof');OUT.mkdir(parents=True,exist_ok=True)
 mode={'name':'valid'};reads=[]
 class Ssm(http.server.BaseHTTPRequestHandler):
  def log_message(self,*args):pass
