@@ -94,6 +94,36 @@ public class LambdaIamRequestSigning implements ClientRequestFilter, WriterInter
         return EnvironmentVariableCredentialsProvider.create().resolveCredentials();
     }
 
+    /** Sign only the bound, read-only readiness endpoint using the same runtime identity. */
+    java.net.http.HttpRequest signHealthRequest(String clientKey, java.net.http.HttpRequest request) {
+        var config = ConfigProvider.getConfig();
+        if (!ROUTES.containsKey(clientKey)) throw rejected("Unbound health client");
+        URI bound = endpoint(config.getValue("csv.iam.endpoints." + clientKey, String.class));
+        URI target = request.uri();
+        String region = config.getValue("csv.iam.region", String.class);
+        if (!region.matches("[a-z]{2}(?:-[a-z]+)+-[0-9]+")
+                || !bound.getHost().matches("[a-z0-9]+\\.lambda-url\\." + java.util.regex.Pattern.quote(region) + "\\.on\\.aws")
+                || port(bound) != 443 || !sameOrigin(bound, target) || !"GET".equals(request.method())
+                || !"/q/health".equals(target.getRawPath()) || target.getRawQuery() != null
+                || target.getRawFragment() != null || target.getRawUserInfo() != null || request.bodyPublisher().isPresent())
+            throw rejected("Health target is outside the bound readiness endpoint");
+        AwsCredentialsIdentity identity;
+        try { identity = credentials(); }
+        catch (RuntimeException unavailable) { throw rejected("Lambda IAM credentials are unavailable"); }
+        if (!(identity instanceof AwsSessionCredentialsIdentity session) || session.sessionToken().isBlank()
+                || identity.accessKeyId().isBlank() || identity.secretAccessKey().isBlank()
+                || identity.expirationTime().filter(t -> !t.isAfter(Instant.now().plusSeconds(30))).isPresent())
+            throw rejected("Lambda IAM credentials are missing or expired");
+        var headers = new jakarta.ws.rs.core.MultivaluedHashMap<String, Object>();
+        request.headers().map().forEach((name, values) -> headers.put(name, new java.util.ArrayList<>(values)));
+        apply(headers, new RequestState(target, "GET", region, identity, 0), new byte[0]);
+        var result = java.net.http.HttpRequest.newBuilder(request, (name, value) -> false);
+        headers.forEach((name, values) -> {
+            if (!name.equalsIgnoreCase("host")) values.forEach(value -> result.header(name, value.toString()));
+        });
+        return result.build();
+    }
+
     @Override public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
         Object value = context.getProperty(STATE);
         if (!(value instanceof RequestState state)) throw rejected("IAM request state is missing");
