@@ -55,6 +55,23 @@ MicroProfile `followRedirects`, and global enabling settings are rejected even i
 another setting would shadow them. Deadlines, serializer behavior and generated response/cache handling remain owned
 by their existing client/runtime configuration.
 
+## Authenticated readiness probes
+
+`LambdaIamHealthCheckService` is the prioritised alternative runtime health bean. For each configured Lambda
+REST binding it signs only an empty GET to the same origin's `/q/health`, using the same temporary
+runtime identity and SDK signer as business requests. Other paths, origins, queries, existing AWS
+authentication and missing/sessionless/expired credentials fail closed. It preserves TLS and the
+health timeout; HTTP 503 remains unhealthy. No public endpoint or health bypass is introduced.
+
+This requires the coordinated runtime `HealthCheckService.customizeHttpHealthRequest` hook.
+The specialised method remains binary-compatible with the prior runtime, but the compatibility
+gate must prove superclass dispatch with the corrected runtime before promotion. Worker Lambda
+configuration explicitly selects `CLIENT_KEY_REQUIRED` for its strict queue-mode readiness.
+
+An existing Durable driver's numbered Action target is immutable. Keep it and the retained semantic
+execution/input unchanged. Any corrected consumer-version promotion must prove that the existing
+queue/recovery path can consume it; neither a new submission nor a mutable overwrite is a shortcut.
+
 ## Immutable configuration input
 
 Select a Cloud-verified, nonsecret JSON export with the ordinary Maven property
