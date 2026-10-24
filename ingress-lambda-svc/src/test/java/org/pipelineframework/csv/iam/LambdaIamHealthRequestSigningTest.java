@@ -60,6 +60,26 @@ class LambdaIamHealthRequestSigningTest {
         identity = software.amazon.awssdk.auth.credentials.AwsBasicCredentials.create("fixture", "fixture");
         assertThatThrownBy(() -> signer.signHealthRequest(key, request(health))).hasMessageContaining("missing or expired");
     }
+
+    @Test void getWithBodyCannotUseTheReadinessPermission() {
+        assertThatThrownBy(() -> signer.signHealthRequest(key, HttpRequest.newBuilder(health)
+            .method("GET", HttpRequest.BodyPublishers.ofString("unexpected")).build()))
+            .hasMessageContaining("outside");
+    }
+    @Test void existingAwsHeadersCannotBeResigned() {
+        assertThatThrownBy(() -> signer.signHealthRequest(key, HttpRequest.newBuilder(health)
+            .header("x-amz-date", "20261024T000000Z").build())).hasMessageContaining("Preexisting");
+    }
+    @Test void userInformationCannotUseTheReadinessPermission() {
+        assertThatThrownBy(() -> signer.signHealthRequest(key,
+            request(URI.create("https://user@fixture.lambda-url.eu-west-1.on.aws/q/health"))))
+            .hasMessageContaining("outside");
+    }
+    @Test void fragmentCannotUseTheReadinessPermission() {
+        assertThatThrownBy(() -> signer.signHealthRequest(key, request(URI.create(health + "#fragment"))))
+            .hasMessageContaining("outside");
+    }
+
     @Test void specializationUsesTheSignerForBoundRestHealthOnly() {
         var service = new LambdaIamHealthCheckService() {
             protected LambdaIamRequestSigning signer() { return signer; }
