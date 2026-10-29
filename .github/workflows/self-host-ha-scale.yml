@@ -68,7 +68,9 @@ jobs:
           path: |
             ${{ runner.temp }}/csv-ha-${{ matrix.await-transport }}-images.tar
             orchestrator-svc/target
-          key: tpf-csv-ha-images-v3-${{ runner.os }}-${{ runner.arch }}-${{ matrix.await-transport }}-${{ hashFiles('pom*.xml', '**/pom.xml', 'config/**', '**/src/**', 'self-host/container/**') }}
+          # SNAPSHOT dependencies may change without a CSV source change.
+          # Reuse images only inside this workflow attempt; reruns must rebuild.
+          key: tpf-csv-ha-images-v4-${{ github.run_id }}-${{ github.run_attempt }}-${{ runner.os }}-${{ runner.arch }}-${{ matrix.await-transport }}-${{ hashFiles('pom*.xml', '**/pom.xml', 'config/**', '**/src/**', 'self-host/container/**') }}
 
       - name: Load CSV application images
         if: ${{ steps.csv-application-images.outputs.cache-hit == 'true' }}
