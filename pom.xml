@@ -81,8 +81,8 @@
         Compatibility tests inject a tested BOM plus that explicit build-plugin pin.
         ================================================================================
         -->
-        <pipelineframework.bom.version>26.10.1-SNAPSHOT</pipelineframework.bom.version>
-        <tpf.release.maven-plugin.version>26.10.1-SNAPSHOT</tpf.release.maven-plugin.version>
+        <pipelineframework.bom.version>26.11.1-SNAPSHOT</pipelineframework.bom.version>
+        <tpf.release.maven-plugin.version>26.11.1-SNAPSHOT</tpf.release.maven-plugin.version>
         <!-- Release production is explicit; ordinary development verification stays unchanged. -->
         <tpf.release.skip>true</tpf.release.skip>
         <!-- Optional, nonsecret Cloud-verified transport export; no source/profile selection. -->
