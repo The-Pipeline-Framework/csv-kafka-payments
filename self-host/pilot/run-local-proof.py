@@ -172,7 +172,8 @@ try:
     with urllib.request.urlopen(probe,timeout=30) as response:probe_status=response.status
    except urllib.error.HTTPError as response:probe_status=response.code
    parsed=urllib.parse.urlparse(url);query=urllib.parse.parse_qs(parsed.query);object_path=parsed.path.lstrip('/').split('/',1)
-   retained=aws('s3api','list-parts','--bucket',object_path[0],'--key',object_path[1],'--upload-id',query['uploadId'][0])
+   # Upload IDs are opaque and may begin with '-'; bind the value to its option.
+   retained=aws('s3api','list-parts','--bucket',object_path[0],'--key',object_path[1],'--upload-id='+query['uploadId'][0])
    save('temporary-part-byte-bound',{'declaredBytes':len(data[slot]),'configuredMaximumBytes':1048576,'probeBytes':2*1048576,'providerStatus':probe_status,'storedPartBytes':[p['Size'] for p in retained.get('Parts',[])],'signedHeaders':query.get('X-Amz-SignedHeaders',[]),'signatureValidation':'Enabled in the pinned local S3 fixture','scope':'Local S3 provider observation only; not live AWS signature enforcement. Correct declared part is uploaded immediately afterward.'})
    if 'content-length' in query.get('X-Amz-SignedHeaders',[''])[0]:
     assert probe_status==403 and not retained.get('Parts',[]),'Reserved-length signature was not enforced by the local S3 fixture'
