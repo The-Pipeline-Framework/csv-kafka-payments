@@ -45,7 +45,7 @@ services:
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/target/dev-certs/persistence-svc/server-keystore.jks"
       # Local/demo only: drop-and-create destroys persistence data on restart.
       # Use a non-destructive schema strategy outside this throwaway stack.
-      JAVA_OPTS_APPEND: >-
+      JAVA_TOOL_OPTIONS: >-
         --enable-preview
         -Dquarkus.http.host=0.0.0.0
         -Dquarkus.http.port=8282
@@ -85,7 +85,7 @@ services:
       SERVER_TRUSTSTORE_PASSWORD: secret
       CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/target/dev-certs/pipeline-runtime-svc/client-truststore.jks"
       CLIENT_TRUSTSTORE_PASSWORD: secret
-      JAVA_OPTS_APPEND: >-
+      JAVA_TOOL_OPTIONS: >-
         --enable-preview
         -Dquarkus.http.host=0.0.0.0
         -Dquarkus.http.port=8183
@@ -171,7 +171,7 @@ services:
       SERVER_TRUSTSTORE_PASSWORD: secret
       CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/target/dev-certs/orchestrator-svc/client-truststore.jks"
       CLIENT_TRUSTSTORE_PASSWORD: secret
-      JAVA_OPTS_APPEND: >-
+      JAVA_TOOL_OPTIONS: >-
         --enable-preview
         -Dquarkus.http.host=0.0.0.0
         -Dquarkus.http.port=8182
@@ -289,7 +289,7 @@ services:
       PIPELINE_OBJECT_INGEST_AUTOSTART: "false"
       SERVER_KEYSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/target/dev-certs/orchestrator-svc/server-keystore.jks"
       CLIENT_TRUSTSTORE_PATH: "${TPF_REPO_ROOT:?TPF_REPO_ROOT must be set}/target/dev-certs/orchestrator-svc/client-truststore.jks"
-      JAVA_OPTS_APPEND: >-
+      JAVA_TOOL_OPTIONS: >-
         --enable-preview
         -Dquarkus.http.host=0.0.0.0
         -Dquarkus.http.port=8082

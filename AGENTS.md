@@ -2,6 +2,10 @@
 
 ## Development dependency policy
 
+Jib JVM builds inherit the pinned Temurin Java 21 JRE and non-root UID 185 from the root POM.
+Use JVM-standard `JAVA_TOOL_OPTIONS` for runtime flags; `JAVA_OPTS_APPEND` belongs to the old Red Hat launcher.
+Keep native base images independent. Verify packaged startup and E2E behaviour when refreshing the JVM image digest.
+
 - Development on `main` follows the active TPF snapshot line, currently `26.11.1-SNAPSHOT`; do not pin another TPF component to `26.9.4` or an older snapshot line.
 - Maven requires a version: do not use `LATEST`, `RELEASE`, or version ranges to stand in for Git `main`. Select TPF dependencies and annotation processors through `pipelineframework.bom.version`; do not add independent compiler/runtime/Connector version choices. The imported BOM cannot manage Maven plugins, so `tpf.release.maven-plugin.version` is the separate release-plugin version and compatibility-test override point. Keep both properties declared exactly once for system-test materialisation.
 - `.mvn/maven.config` includes `-U` so cached snapshot metadata is refreshed. Every Maven invocation still needs the isolated local repository required below.
