@@ -79,6 +79,14 @@ The script:
 7. submits `payments_12.csv` through `/tpf/control-plane/...`,
 8. waits for await completions and verifies generated `.out` files.
 
+Admission profiles require a successful execution, exactly the generated CSV IDs once each in the output,
+completed durable await coverage for every CSV ID in that execution, and admission reservations drained
+without exceeding capacity. The await idempotency fields in `pipeline.yaml` identify each payment by `csvId`;
+item positions can restart per page or change on retry. Retained terminal interactions from retries are
+reported separately, rather than required to equal the input record count. Pending interactions, missing
+completed IDs, and unexpected IDs still fail. Projected durable evidence and its summary are saved as
+`await-interactions.json` and `await-interaction-observation.json` under the run directory.
+
 Set `TPF_SKIP_FRAMEWORK_INSTALL=true` or `TPF_SKIP_CONTAINER_BUILD=true` for faster reruns after local artifacts/images are current.
 
 ## Local Defaults

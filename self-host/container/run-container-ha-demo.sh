@@ -540,15 +540,18 @@ if [[ "${TPF_CSV_VERIFY_ADMISSION}" == "true" ]]; then
     exit 1
   fi
   if (( TPF_CSV_RECORD_COUNT > 0 )); then
-    interaction_count="$(dynamo_count tpf_await_interaction)" || {
-      echo "Failed reading durable await interaction count from LocalStack." >&2
-      exit 1
-    }
-    if (( interaction_count != TPF_CSV_RECORD_COUNT )); then
-      echo "Expected ${TPF_CSV_RECORD_COUNT} durable await interactions, found ${interaction_count}." >&2
-      exit 1
-    fi
-    echo "Durable await interaction count matches expected ${TPF_CSV_RECORD_COUNT}."
+    # Preserve the projected durable evidence even when validation fails. The CLI
+    # paginates the scan; never compare a whole-table attempt count to CSV rows.
+    compose exec -T localstack awslocal dynamodb scan \
+      --table-name tpf_await_interaction --consistent-read \
+      --projection-expression 'tenant_id,execution_id,step_id,idempotency_key,#status,interaction_id' \
+      --expression-attribute-names '{"#status":"status"}' --output json \
+      > "${TPF_RUN_DIR}/await-interactions.json"
+    python3 "${SCRIPT_DIR}/verify-await-interactions.py" \
+      --flow-log "${TPF_RUN_DIR}/ha-scale-flow.log" \
+      --tenant-id "${TPF_TENANT_ID}" --record-count "${TPF_CSV_RECORD_COUNT}" \
+      < "${TPF_RUN_DIR}/await-interactions.json" \
+      | tee "${TPF_RUN_DIR}/await-interaction-observation.json"
   fi
 else
   run_flow
