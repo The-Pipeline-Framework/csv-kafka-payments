@@ -53,7 +53,7 @@ case "$suite" in
     ;;
   ha|ha-scale)
     cleanup_compose() {
-      local exit_code=$?
+      local exit_code=${1:-$?}
       local transport=${TPF_CSV_AWAIT_TRANSPORT:-sqs}
       local compose=(-f self-host/container/compose.yaml)
       # The demo runs in a child shell, so its Compose interpolation values do not
@@ -79,6 +79,11 @@ case "$suite" in
             -printf 'HA scale file %P %s bytes\n' >&2 || true
         fi
       fi
+      if [[ "$suite" == ha-scale ]]; then
+        echo "HA trace: ${transport}/${TPF_CSV_ADMISSION_PROFILE:-unknown} exit=${exit_code}"
+        docker compose "${compose[@]}" logs --no-color --timestamps coordinator worker 2>&1 \
+          | grep -E 'event=(sqs_work_|execution_lease_|execution_page_)|Scheduling async execution retry|ContextNotActiveException|PIPELINE FINISHED' || true
+      fi
       docker compose "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
       return "$exit_code"
     }
@@ -86,6 +91,7 @@ case "$suite" in
       local transport=$1 profile=$2
       export TPF_CSV_AWAIT_TRANSPORT=$transport TPF_CSV_ADMISSION_PROFILE=$profile
       if [[ "$suite" == ha-scale ]]; then
+        export TPF_KEEP_STACK=true TPF_CSV_QUEUE_TRACE_LEVEL=DEBUG
         export TPF_CSV_RECORD_COUNT=10000
         export TPF_CSV_TRANSITION_TRANSPORT_DEADLINE=PT180S
         export TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS=900
@@ -94,21 +100,30 @@ case "$suite" in
       fi
       export TPF_MAVEN_ARGS="${MAVEN_ARGS:-}"
       export TPF_SKIP_CONTAINER_BUILD=false
-      ./self-host/container/run-container-ha-demo.sh --prepare-images
+      ./self-host/container/run-container-ha-demo.sh --prepare-images || return $?
       export TPF_SKIP_CONTAINER_BUILD=true TPF_KEEP_STACK_ON_FAILURE=true
       ./self-host/container/run-container-ha-demo.sh --ci
-      cleanup_compose
     }
     configure_testcontainers
     trap cleanup_compose EXIT INT TERM
     if [[ "$suite" == ha-scale ]]; then
       python3 -m unittest -v self-host/container/test_demo_client.py
     fi
+    result=0
     for transport in sqs kafka; do
       for profile in slow burst; do
-        run_profile "$transport" "$profile"
+        if [[ "$suite" == ha-scale ]]; then
+          lane_status=0
+          run_profile "$transport" "$profile" || lane_status=$?
+          cleanup_compose "$lane_status" || result=1
+        else
+          run_profile "$transport" "$profile"
+          cleanup_compose
+        fi
       done
     done
+    trap - EXIT INT TERM
+    exit "$result"
     ;;
   observability)
     ./self-host/container/run-observability-proof.sh
