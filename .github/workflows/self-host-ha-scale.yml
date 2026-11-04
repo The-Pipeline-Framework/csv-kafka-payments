@@ -106,6 +106,7 @@ jobs:
         env:
           TPF_CSV_AWAIT_TRANSPORT: ${{ matrix.await-transport }}
           TPF_CSV_ADMISSION_PROFILE: ${{ matrix.admission-profile }}
+          TPF_CSV_WORKER_SCOPE_TRACE: ${{ github.event_name == 'schedule' && matrix.await-transport == 'kafka' && matrix.admission-profile == 'burst' }}
           TPF_CSV_RECORD_COUNT: "10000"
           TPF_CSV_TRANSITION_TRANSPORT_DEADLINE: "PT180S"
           # Match the merged ha-scale policy in scripts/system-test-suite.sh.
