@@ -300,6 +300,7 @@ services:
         -Dpipeline.client.tls-configuration-name=
         -Dquarkus.otel.resource.attributes=service.name=csv-coordinator
         '-Dquarkus.log.category."org.pipelineframework.diagnostics.queue".level=${TPF_CSV_QUEUE_TRACE_LEVEL:-INFO}'
+        -Dpipeline.orchestrator.lease-ms=${TPF_CSV_COORDINATOR_LEASE_MS:-1800000}
         ${TPF_CSV_OTEL_OPTIONS:-}
         -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
         -Dquarkus.otel.sdk.disabled=${TPF_CSV_OTEL_SDK_DISABLED:-true}

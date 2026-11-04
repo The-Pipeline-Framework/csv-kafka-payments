@@ -81,8 +81,14 @@ case "$suite" in
       fi
       if [[ "$suite" == ha-scale ]]; then
         echo "HA trace: ${transport}/${TPF_CSV_ADMISSION_PROFILE:-unknown} exit=${exit_code}"
-        docker compose "${compose[@]}" logs --no-color --timestamps coordinator worker 2>&1 \
-          | grep -E 'event=(sqs_work_|execution_lease_|execution_page_)|Scheduling async execution retry|ContextNotActiveException|PIPELINE FINISHED' || true
+        local trace
+        trace="$(docker compose "${compose[@]}" logs --no-color --timestamps coordinator worker 2>&1 \
+          | grep -E 'event=(sqs_work_|execution_lease_|execution_page_)|Scheduling async execution retry|ContextNotActiveException|PIPELINE FINISHED')" || true
+        printf '%s\n' "$trace"
+        if (( exit_code == 0 )) && ! grep -Eq 'event=execution_lease_renewal .* renewed=true' <<< "$trace"; then
+          echo "Short-lease SQS burst must observe a successful execution lease renewal." >&2
+          exit_code=1
+        fi
       fi
       docker compose "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
       return "$exit_code"
@@ -92,6 +98,7 @@ case "$suite" in
       export TPF_CSV_AWAIT_TRANSPORT=$transport TPF_CSV_ADMISSION_PROFILE=$profile
       if [[ "$suite" == ha-scale ]]; then
         export TPF_KEEP_STACK=true TPF_CSV_QUEUE_TRACE_LEVEL=DEBUG
+        export TPF_CSV_COORDINATOR_LEASE_MS=30000
         export TPF_CSV_RECORD_COUNT=10000
         export TPF_CSV_TRANSITION_TRANSPORT_DEADLINE=PT180S
         export TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS=900
@@ -113,6 +120,8 @@ case "$suite" in
     for transport in sqs kafka; do
       for profile in slow burst; do
         if [[ "$suite" == ha-scale ]]; then
+          # This diagnostic candidate targets lease renewal in the 10k SQS burst profile.
+          [[ "$transport/$profile" == sqs/burst ]] || continue
           lane_status=0
           run_profile "$transport" "$profile" || lane_status=$?
           cleanup_compose "$lane_status" || result=1
