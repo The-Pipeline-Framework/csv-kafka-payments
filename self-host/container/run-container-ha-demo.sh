@@ -196,6 +196,7 @@ cleanup() {
     # Collect only the scoped HTTP 5xx stack before Compose removes the worker.
     compose logs --no-color --no-log-prefix worker | awk '
       /WorkerRestScopeTraceFilter.*event=worker_rest_scope_5xx/ { capture = 1; print; next }
+      capture && /^[[:space:]]*java[.]lang[.]Throwable: REST worker CDI request-state destruction$/ { print; next }
       capture && /^[[:space:]]+at / { print; next }
       { capture = 0 }
     ' || echo "Warning: could not collect worker REST scope diagnostics." >&2
