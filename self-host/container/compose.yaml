@@ -181,7 +181,7 @@ services:
         -Dquarkus.grpc.server.plain-text=true
         -Dpipeline.client.tls-configuration-name=
         -Dquarkus.otel.resource.attributes=service.name=csv-worker
-        '-Dquarkus.log.category."io.quarkus.arc.requestContext".level=${TPF_CSV_WORKER_ARC_TRACE_LEVEL:-INFO}'
+        -Dcsv.ha.worker-scope-trace=${TPF_CSV_WORKER_SCOPE_TRACE:-false}
         ${TPF_CSV_OTEL_OPTIONS:-}
         -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
         -Dquarkus.otel.sdk.disabled=${TPF_CSV_WORKER_OTEL_SDK_DISABLED:-${TPF_CSV_OTEL_SDK_DISABLED:-true}}

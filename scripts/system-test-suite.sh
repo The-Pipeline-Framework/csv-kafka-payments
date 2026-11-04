@@ -86,7 +86,7 @@ case "$suite" in
           | grep -E 'event=(sqs_work_|execution_lease_|execution_page_)|Scheduling async execution retry|ContextNotActiveException|PIPELINE FINISHED')" || true
         printf '%s\n' "$trace"
         if ! docker compose "${compose[@]}" logs --no-color --no-log-prefix --timestamps worker \
-          | python3 self-host/container/report-worker-arc-trace.py; then
+          | python3 self-host/container/report-worker-rest-scope.py; then
           if (( exit_code == 0 )); then
             exit_code=1
           fi
@@ -100,7 +100,7 @@ case "$suite" in
       export TPF_CSV_AWAIT_TRANSPORT=$transport TPF_CSV_ADMISSION_PROFILE=$profile
       if [[ "$suite" == ha-scale ]]; then
         export TPF_KEEP_STACK=true TPF_CSV_QUEUE_TRACE_LEVEL=DEBUG
-        export TPF_CSV_WORKER_ARC_TRACE_LEVEL=TRACE
+        export TPF_CSV_WORKER_SCOPE_TRACE=true
         export TPF_CSV_RECORD_COUNT=10000
         export TPF_CSV_TRANSITION_TRANSPORT_DEADLINE=PT180S
         export TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS=900
