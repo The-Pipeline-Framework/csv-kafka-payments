@@ -48,7 +48,7 @@ jobs:
           cache: maven
 
       - name: Validate CSV HA fixture helpers
-        run: python3 -m unittest -v self-host/container/test_demo_client.py self-host/container/test_ha_diagnostics.py self-host/container/test_ha_scale_policy.py
+        run: python3 -m unittest -v self-host/container/test_demo_client.py self-host/container/test_ha_diagnostics.py self-host/container/test_ha_scale_policy.py self-host/container/test_await_interactions.py
 
       - name: Setup Docker environment
         uses: ./.github/actions/setup-testcontainers
