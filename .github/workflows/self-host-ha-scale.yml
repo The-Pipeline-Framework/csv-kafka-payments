@@ -48,7 +48,7 @@ jobs:
           cache: maven
 
       - name: Validate CSV HA fixture helpers
-        run: python3 -m unittest -v self-host/container/test_demo_client.py self-host/container/test_ha_diagnostics.py self-host/container/test_ha_scale_policy.py self-host/container/test_await_interactions.py
+        run: python3 -m unittest -v self-host/container/test_demo_client.py self-host/container/test_ha_diagnostics.py self-host/container/test_ha_scale_policy.py self-host/container/test_await_interactions.py self-host/container/test_system_test_scale_lanes.py
 
       - name: Setup Docker environment
         uses: ./.github/actions/setup-testcontainers
@@ -126,7 +126,7 @@ jobs:
 
       - name: Make CSV self-host scale failure artifacts readable
         if: failure()
-        run: sudo chmod -R a+rX self-host/container/target/tpf-container-ha || true
+        run: sudo chmod -R a+rX self-host/container/target/tpf-container-ha self-host/container/target/ha-scale-failures || true
 
       - name: Upload CSV self-host scale failure artifacts
         if: failure()
@@ -135,6 +135,7 @@ jobs:
           name: csv-self-host-ha-scale-${{ matrix.await-transport }}-${{ matrix.admission-profile }}
           path: |
             self-host/container/target/tpf-container-ha/**
+            self-host/container/target/ha-scale-failures/**
             **/target/replay/**
             self-host/container/compose*.yaml
           retention-days: 14
