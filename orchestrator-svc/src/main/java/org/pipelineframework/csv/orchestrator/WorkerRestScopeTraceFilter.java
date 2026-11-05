@@ -17,7 +17,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.orchestrator.RestTransitionWorkerProtocol;
 
-/** Draft-only diagnostic for the REST transition request's own CDI scope. */
+/** Opt-in diagnostic for the REST transition request's own CDI scope. */
 @Provider
 @ConstrainedTo(RuntimeType.SERVER)
 public class WorkerRestScopeTraceFilter implements ContainerRequestFilter {
@@ -42,25 +42,55 @@ public class WorkerRestScopeTraceFilter implements ContainerRequestFilter {
 
     @RequestScoped
     public static class ScopeProbe {
-        private String traceId;
-        private String stateId;
+        private FailureTrace trace;
 
         void arm(RoutingContext request) {
-            String trace = UUID.randomUUID().toString();
-            String state = Integer.toHexString(Arc.container().requestContext().getState().hashCode());
-            traceId = trace;
-            stateId = state;
-            LOG.infof("event=worker_rest_scope_open traceId=%s stateId=%s", trace, state);
-            request.addEndHandler(outcome -> LOG.infof(
-                "event=worker_rest_scope_end traceId=%s stateId=%s status=%d endSucceeded=%s",
-                trace, state, request.response().getStatusCode(), outcome.succeeded()));
+            var requestTrace = new FailureTrace(UUID.randomUUID().toString(),
+                Integer.toHexString(Arc.container().requestContext().getState().hashCode()));
+            trace = requestTrace;
+            request.addEndHandler(outcome -> requestTrace.responseEnded(request.response().getStatusCode()));
         }
 
         @PreDestroy
         void captureDestruction() {
-            if (traceId != null) {
-                LOG.infof(new Throwable("REST worker CDI request-state destruction"),
-                    "event=worker_rest_scope_destroy traceId=%s stateId=%s", traceId, stateId);
+            if (trace != null) {
+                trace.destroyed();
+            }
+        }
+    }
+
+    // Response completion and CDI teardown can run on different threads and in either order.
+    private static final class FailureTrace {
+        private final String traceId;
+        private final String stateId;
+        private int status;
+        private Throwable destruction;
+
+        private FailureTrace(String traceId, String stateId) {
+            this.traceId = traceId;
+            this.stateId = stateId;
+        }
+
+        synchronized void responseEnded(int responseStatus) {
+            status = responseStatus;
+            if (status < 500) {
+                destruction = null;
+            }
+            logFailure();
+        }
+
+        synchronized void destroyed() {
+            if (status == 0 || status >= 500) {
+                destruction = new Throwable("REST worker CDI request-state destruction");
+                logFailure();
+            }
+        }
+
+        private void logFailure() {
+            if (status >= 500 && destruction != null) {
+                LOG.warnf(destruction, "event=worker_rest_scope_5xx traceId=%s stateId=%s status=%d",
+                    traceId, stateId, status);
+                destruction = null;
             }
         }
     }

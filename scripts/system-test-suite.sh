@@ -85,12 +85,18 @@ case "$suite" in
         trace="$(docker compose "${compose[@]}" logs --no-color --timestamps coordinator worker 2>&1 \
           | grep -E 'event=(sqs_work_|execution_lease_|execution_page_)|Scheduling async execution retry|ContextNotActiveException|PIPELINE FINISHED')" || true
         printf '%s\n' "$trace"
-        if ! docker compose "${compose[@]}" logs --no-color --no-log-prefix --timestamps worker \
-          | python3 self-host/container/report-worker-rest-scope.py; then
-          if (( exit_code == 0 )); then
-            exit_code=1
-          fi
+      fi
+      if [[ "$suite" == ha-scale ]] && (( exit_code != 0 )); then
+        local run_dir="${TPF_RUN_DIR:-$repo_root/self-host/container/target/tpf-container-ha}"
+        local evidence_root="$repo_root/self-host/container/target/ha-scale-failures"
+        local evidence
+        mkdir -p "$evidence_root"
+        evidence=$(mktemp -d "$evidence_root/${transport}-${TPF_CSV_ADMISSION_PROFILE:-unknown}.XXXXXX")
+        if [[ -d "$run_dir" ]]; then
+          cp -a "$run_dir/." "$evidence/" || exit_code=1
         fi
+        docker compose "${compose[@]}" logs --no-color --timestamps > "$evidence/compose.log" 2>&1 || true
+        echo "Preserved failed HA scale lane at $evidence"
       fi
       docker compose "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
       return "$exit_code"
@@ -100,7 +106,6 @@ case "$suite" in
       export TPF_CSV_AWAIT_TRANSPORT=$transport TPF_CSV_ADMISSION_PROFILE=$profile
       if [[ "$suite" == ha-scale ]]; then
         export TPF_KEEP_STACK=true TPF_CSV_QUEUE_TRACE_LEVEL=DEBUG
-        export TPF_CSV_WORKER_SCOPE_TRACE=true
         export TPF_CSV_RECORD_COUNT=10000
         export TPF_CSV_TRANSITION_TRANSPORT_DEADLINE=PT180S
         export TPF_CSV_FIXTURE_RUN_DEADLINE_SECONDS=900
@@ -116,14 +121,12 @@ case "$suite" in
     configure_testcontainers
     trap cleanup_compose EXIT INT TERM
     if [[ "$suite" == ha-scale ]]; then
-      python3 -m unittest -v self-host/container/test_demo_client.py
+      python3 -m unittest -v self-host/container/test_demo_client.py self-host/container/test_system_test_scale_lanes.py
     fi
     result=0
     for transport in sqs kafka; do
       for profile in slow burst; do
         if [[ "$suite" == ha-scale ]]; then
-          # This diagnostic candidate isolates the Kafka burst REST response failure.
-          [[ "$transport/$profile" == kafka/burst ]] || continue
           lane_status=0
           run_profile "$transport" "$profile" || lane_status=$?
           cleanup_compose "$lane_status" || result=1

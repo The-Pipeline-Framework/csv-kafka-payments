@@ -181,7 +181,6 @@ services:
         -Dquarkus.grpc.server.plain-text=true
         -Dpipeline.client.tls-configuration-name=
         -Dquarkus.otel.resource.attributes=service.name=csv-worker
-        -Dcsv.ha.worker-scope-trace=${TPF_CSV_WORKER_SCOPE_TRACE:-false}
         ${TPF_CSV_OTEL_OPTIONS:-}
         -Dquarkus.otel.enabled=${TPF_CSV_OTEL_ENABLED:-false}
         -Dquarkus.otel.sdk.disabled=${TPF_CSV_WORKER_OTEL_SDK_DISABLED:-${TPF_CSV_OTEL_SDK_DISABLED:-true}}
@@ -191,6 +190,7 @@ services:
         -Dpipeline.orchestrator.mode=QUEUE_ASYNC
         -Dpipeline.max-concurrency=${TPF_PIPELINE_MAX_CONCURRENCY:-250}
         -Dpipeline.orchestrator.resume-token-secret=csv-payments-container-resume-token-secret
+        -Dcsv.ha.worker-scope-trace=${TPF_CSV_WORKER_SCOPE_TRACE:-false}
         -Dpipeline.orchestrator.worker.rest.server-enabled=true
         -Dpipeline.orchestrator.worker.rest.shared-secret-ref=env:TPF_WORKER_SECRET
         -Dpipeline.orchestrator.strict-startup=false
