@@ -700,8 +700,10 @@ production. Enable it explicitly and supply an immutable Release version:
 tpf release verify --release monolith-svc/target/pipeline-release.json
 ```
 
-The descriptor is `monolith-svc/target/pipeline-release.json`; its ZIP is
-`monolith-svc/target/pipeline-release-artifacts/monolith-svc.zip`. Local `file:` URIs are not promotable.
+The descriptor is `monolith-svc/target/pipeline-release.json`; its Compiled Truth carrier ZIP has a
+digest-based filename under `monolith-svc/target/pipeline-release-artifacts/`. Verification stages an identical
+`monolith-svc.zip` copy for Maven attachment without changing the descriptor or canonical archive.
+Local `file:` URIs are not promotable.
 Kafka, PostgreSQL and other external services remain deployment prerequisites.
 
 Keep the descriptor and ZIP together. If a rebuild changes the packaged bytes, choose a new Release version;
@@ -745,6 +747,7 @@ Build the modular images, then produce the Release from those packages:
 ./build-modular-telemetry-images.sh
 ./mvnw -B -pl orchestrator-svc \
   org.pipelineframework:pipelineframework-release-maven-plugin:generate-release-descriptor@produce-modular-release \
+  org.codehaus.mojo:exec-maven-plugin:exec@stage-verified-modular-release-archive-attachments \
   org.codehaus.mojo:build-helper-maven-plugin:attach-artifact@attach-modular-release-archives \
   -Dtpf.release.skip=false -Dtpf.release.version=local-modular-1 -Dtpf.release.allowLocalUris=true \
   -Dmaven.repo.local="$PWD/.m2/repository"

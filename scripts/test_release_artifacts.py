@@ -117,6 +117,19 @@ class ReleaseArtifactTest(unittest.TestCase):
                     if scenario == "valid":
                         self.assertEqual(0, result.returncode, result.stderr)
                         self.assertIn("5 complete archives", result.stdout)
+                        descriptor = carrier / "target/pipeline-release.json"
+                        descriptor_bytes = descriptor.read_bytes()
+                        originals = {module: (root / module / "target/application.zip").read_bytes()
+                                     for module in modules}
+                        staged = subprocess.run([sys.executable, *flags, str(VERIFIER),
+                                                 "--stage-maven-attachments", str(carrier)],
+                                                capture_output=True, text=True)
+                        self.assertEqual(0, staged.returncode, staged.stderr)
+                        self.assertEqual(descriptor_bytes, descriptor.read_bytes())
+                        for module, content in originals.items():
+                            self.assertEqual(content, (root / module / "target/application.zip").read_bytes())
+                            self.assertEqual(content, (carrier / "target/pipeline-release-artifacts" /
+                                                       (module + ".zip")).read_bytes())
                     else:
                         self.assertNotEqual(0, result.returncode, result.stdout)
                         diagnostic = {"changed_host": "packaged bytes differ", "missing_host": "every host exactly once",
