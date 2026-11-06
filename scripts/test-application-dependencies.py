@@ -23,7 +23,7 @@ class ApplicationDependenciesTest(unittest.TestCase):
         self.assertEqual("true", root.findtext(".//m:annotationProcessorPathsUseDepMgmt", namespaces=NS))
 
         pending = [ROOT / "pom.xml"]
-        plugin_count = 0
+        release_execution_count = 0
         while pending:
             pom = pending.pop()
             project = ET.parse(pom).getroot()
@@ -36,9 +36,11 @@ class ApplicationDependenciesTest(unittest.TestCase):
                         self.assertIsNone(entry.find("m:version", NS), f"{pom}: {artifact} bypasses BOM")
             for plugin in project.findall(".//m:plugin", NS):
                 if plugin.findtext("m:artifactId", namespaces=NS) == "pipelineframework-release-maven-plugin":
-                    plugin_count += 1
                     self.assertEqual("${tpf.release.maven-plugin.version}", plugin.findtext("m:version", namespaces=NS))
-        self.assertEqual(2, plugin_count)
+                    release_execution_count += sum(
+                        goal.text == "generate-release-descriptor"
+                        for goal in plugin.findall("m:executions/m:execution/m:goals/m:goal", NS))
+        self.assertEqual(2, release_execution_count)
 
 
 if __name__ == "__main__":
