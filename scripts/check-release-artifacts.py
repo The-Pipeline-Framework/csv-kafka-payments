@@ -2,9 +2,12 @@
 """Check a locally produced Release against its complete Quarkus fast-JAR output."""
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
+import shutil
 import sys
+import tempfile
 from urllib.parse import unquote, urlparse
 import zipfile
 
@@ -14,8 +17,14 @@ def require(condition, context):
         raise SystemExit(f"Release artifact verification failed: {context}")
 
 
-require(len(sys.argv) > 1, "supply at least one application module")
-for module in sys.argv[1:]:
+arguments = sys.argv[1:]
+stage_maven_attachments = "--stage-maven-attachments" in arguments
+if stage_maven_attachments:
+    arguments.remove("--stage-maven-attachments")
+require(arguments, "supply at least one application module")
+staged_archives = []
+
+for module in arguments:
     target = Path(module) / "target"
     release = json.loads((target / "pipeline-release.json").read_text())
     artifacts = release["artifacts"]
@@ -47,9 +56,14 @@ for module in sys.argv[1:]:
             # Remote URI resolution remains the public CLI's separate proof.
             artifact_id = artifact.get("artifactId", "")
             require(bool(re.fullmatch(r"[A-Za-z0-9_-]+", artifact_id)), "unsafe archive identity")
-            archive = target / "pipeline-release-artifacts" / (artifact_id + ".zip")
+            digest = artifact.get("digest", "")
+            require(bool(re.fullmatch(r"sha256:[0-9a-f]{64}", digest)), "invalid SHA-256 digest")
+            filename = digest.removeprefix("sha256:") if carrier else artifact_id
+            archive = target / "pipeline-release-artifacts" / (filename + ".zip")
         else:
             require(False, "unsupported local archive check URI scheme")
+        digest = artifact.get("digest", "")
+        require(bool(re.fullmatch(r"sha256:[0-9a-f]{64}", digest)), "invalid SHA-256 digest")
         require(archive.is_file(), f"archive missing: {archive}")
         digest = "sha256:" + hashlib.sha256(archive.read_bytes()).hexdigest()
         require(digest == artifact["digest"], f"digest {digest} != {artifact['digest']}")
@@ -80,6 +94,11 @@ for module in sys.argv[1:]:
                 require(packaged.read(name) == content, f"packaged bytes differ: {name}")
             if carrier:
                 contract = json.loads(packaged.read("META-INF/pipeline/pipeline-contract.json"))
+        if stage_maven_attachments:
+            attachment_id = artifact.get("artifactId", Path(module).name)
+            require(bool(re.fullmatch(r"[A-Za-z0-9_-]+", attachment_id)), "unsafe attachment identity")
+            destination = target / "pipeline-release-artifacts" / (attachment_id + ".zip")
+            staged_archives.append((archive, destination, artifact["digest"]))
         print(f"{artifact.get('artifactId', module)}: complete {archive.stat().st_size} byte archive, digest verified")
     require(contract, "compiled metadata carrier not found")
     require(release["pipelineId"] == contract["pipelineId"], "pipelineId differs from contract")
@@ -89,3 +108,24 @@ for module in sys.argv[1:]:
     artifact_steps = [step for artifact in artifacts for step in artifact["stepIds"]]
     require(artifact_steps == steps, f"artifact steps {artifact_steps} != {steps}")
     print(f"{module}: {len(artifacts)} complete archives, {len(steps)} unique authored steps verified")
+
+if stage_maven_attachments:
+    for source, destination, expected_digest in staged_archives:
+        if source.resolve() == destination.resolve() or (
+                destination.exists() and os.path.samefile(source, destination)):
+            print(f"Attachment already at verified Maven path: {destination}")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=f".{destination.name}.",
+                                             suffix=".tmp", delete=False) as output:
+                temporary = Path(output.name)
+            shutil.copyfile(source, temporary)
+            copied_digest = "sha256:" + hashlib.sha256(temporary.read_bytes()).hexdigest()
+            require(copied_digest == expected_digest, f"staged digest {copied_digest} != {expected_digest}")
+            os.replace(temporary, destination)
+            print(f"Staged verified Maven attachment: {destination}")
+        finally:
+            if temporary is not None and temporary.exists():
+                temporary.unlink()

@@ -223,6 +223,12 @@
                 </executions>
             </plugin>
             <plugin>
+                <!-- Keep module release production before the inherited exec plugin's verification tasks. -->
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework-release-maven-plugin</artifactId>
+                <version>${tpf.release.maven-plugin.version}</version>
+            </plugin>
+            <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.5.0</version>
